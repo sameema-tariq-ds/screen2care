@@ -12,6 +12,29 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./db:/docker-entrypoint-initdb.d   # runs 01_schema.sql then 02_seed.sql on FIRST start only
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U loop -d screening_care_loop"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: screen2care_app
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://loop:loop_dev_password@db:5432/screening_care_loop
+      PORT: 8000
+      DEV_RELOAD: 1
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    restart: unless-stopped
 
 volumes:
   pgdata:

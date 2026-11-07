@@ -1,0 +1,66 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "screen2care"
+version = "0.1.0"
+description = "Screening-to-care clinical intake and follow-up service"
+requires-python = ">=3.11,<3.15"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "uvicorn[standard]>=0.30,<1",
+  "sqlalchemy>=2.0,<3",
+  "psycopg[binary]>=3.2,<4",
+  "jinja2>=3.1,<4",
+  "python-dotenv>=1.0,<2",
+]
+
+[project.optional-dependencies]
+dev = [
+  "black>=24.4,<26",
+  "ruff>=0.4,<1",
+  "mypy>=1.10,<2",
+  "pytest>=8,<10",
+  "pytest-asyncio>=0.23,<2",
+  "httpx>=0.27,<1",
+]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.setuptools.package-data]
+app = ["templates/*.html", "static/*"]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+  "E", "W", "F", "I", "UP", "B", "SIM", "C4", "N", "A", "RET", "RUF"
+]
+ignore = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unused_configs = true
+warn_return_any = true
+warn_unused_ignores = true
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

@@ -8,11 +8,20 @@ FastAPI + PostgreSQL (pgvector) + HTML/CSS dashboard.
 ```bash
 docker compose up -d                     # start PostgreSQL (loads db/*.sql on first start)
 python -m venv .venv
-# Windows:   .venv\Scripts\activate
+Windows:   .venv\Scripts\activate
 # Mac/Linux: source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
+
+For Docker development with live code, template, and static-file reloads:
+
+```bash
+docker compose up --build -d
+docker compose logs -f app
+```
+
+The production compose command remains `docker compose up --build`.
 
 Open:
 - http://localhost:8000          dashboard
