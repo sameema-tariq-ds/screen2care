@@ -1,6 +1,7 @@
 from datetime import date
 from enum import StrEnum
 from typing import Optional
+from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -46,6 +47,12 @@ class RiskStatus(StrEnum):
     PENDING = "Pending"
 
 
+class RiskTool(StrEnum):
+    IBIS = "IBIS"
+    CANRISK = "CanRisk"
+    OTHER = "Other"
+
+
 class ExamStatus(StrEnum):
     NOT_ANSWERED = "Not answered"
     NORMAL = "Normal"
@@ -81,6 +88,11 @@ class FamilySide(StrEnum):
     MOTHER = "Mother's side"
     FATHER = "Father's side"
     UNKNOWN = "Unknown side"
+
+
+class MaritalStatus(StrEnum):
+    MARRIED = "Married"
+    UNMARRIED = "Unmarried"
 
 
 class Relative(BaseModel):
@@ -142,6 +154,7 @@ class IntakeForm(BaseModel):
     national_id: str = Field(min_length=1, max_length=30)
     phone: str = Field(min_length=7, max_length=30)
     evaluation_date: date
+    idempotency_key: str = Field(default_factory=lambda: str(uuid4()), min_length=8, max_length=100)
     presentation: Optional[bool] = None
 
     lump_side: Optional[Side] = None
@@ -155,7 +168,8 @@ class IntakeForm(BaseModel):
     hrt_use: Optional[YesNoUnknown] = None
     hrt_duration_years: Optional[float] = Field(None, ge=0, le=60)
 
-    race_ethnicity: str = Field(min_length=1, max_length=80)
+    race_ethnicity: Optional[str] = Field(None, max_length=80)
+    marital_status: MaritalStatus
     menarche_age: Optional[int] = Field(None, ge=6, le=25)
     menopausal_status: Optional[str] = Field(None, pattern=r"^(Premenopausal|Perimenopausal|Postmenopausal)$")
     menopause_age: Optional[int] = Field(None, ge=20, le=70)
@@ -165,13 +179,11 @@ class IntakeForm(BaseModel):
     chest_radiation_age: Optional[int] = Field(None, ge=1, le=100)
     chest_radiation_years: Optional[int] = Field(None, ge=0, le=100)
     high_risk_biopsy: HighRiskBiopsy
-    lifetime_risk_pct: Optional[float] = Field(None, ge=0, le=100)
-    lifetime_risk_tool: Optional[str] = Field(None, max_length=50)
-    lifetime_risk_date: Optional[date] = None
-    lifetime_risk_status: RiskStatus
+    lifetime_risk_tool: Optional[RiskTool] = None
     genetic_status: GeneticStatus
     genetic_gene: Optional[GeneticGene] = None
     genetic_gene_other: Optional[str] = Field(None, max_length=80)
+    carrier_relative_status: YesNoUnknown
     prior_biopsy_count: int = Field(ge=0, le=100)
     prior_biopsy_atypia: YesNoUnknown
     personal_breast_cancer: YesNoUnknown
@@ -203,8 +215,6 @@ class IntakeForm(BaseModel):
     notified_at: Optional[date] = None
     patient_reached: Optional[bool] = None
     biopsy_follow_up: Optional[BiopsyFollowUp] = None
-    geriatric_life_expectancy_over_10y: Optional[bool] = None
-    geriatric_serious_medical_conditions: Optional[bool] = None
 
     @property
     def age(self) -> int:
@@ -248,6 +258,9 @@ class IntakeForm(BaseModel):
             self.nipple_discharge_side = self.nipple_discharge_color = None
             self.skin_changes = []
             self.pain_type = self.pain_severity = None
+        if self.marital_status == MaritalStatus.UNMARRIED:
+            self.parity = self.age_first_birth = None
+            self.pregnancy_history = self.breastfeeding_history = YesNoUnknown.UNKNOWN
         if self.hrt_use != YesNoUnknown.YES:
             self.hrt_duration_years = None
         if self.menopausal_status != "Postmenopausal":
@@ -276,19 +289,10 @@ class IntakeForm(BaseModel):
             self.chest_radiation_age or self.chest_radiation_years is not None
         ):
             raise ValueError("Enter the age or years for chest radiation.")
-        if self.lifetime_risk_status == RiskStatus.DONE and (
-            self.lifetime_risk_pct is None or not self.lifetime_risk_tool or self.lifetime_risk_date is None
-        ):
-            raise ValueError("Completed lifetime risk requires percentage, tool, and date.")
         if self.genetic_status == GeneticStatus.POSITIVE and self.genetic_gene is None:
             raise ValueError("Select the positive genetic test gene.")
         if self.genetic_gene == GeneticGene.OTHER and not self.genetic_gene_other:
             raise ValueError("Enter the other genetic test gene.")
-        if self.age >= 75 and (
-            self.geriatric_life_expectancy_over_10y is None
-            or self.geriatric_serious_medical_conditions is None
-        ):
-            raise ValueError("Age 75+ requires life expectancy and serious medical conditions answers.")
         if not self.family_history_reviewed and not self.family_history_none:
             raise ValueError("Select either no relevant family history or family history fully reviewed.")
         if any(item in self.plan for item in (PlanOption.URGENT_BIOPSY,)) and (

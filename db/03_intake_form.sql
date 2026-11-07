@@ -39,12 +39,11 @@ ALTER TABLE patient_risk_profile
     DROP CONSTRAINT IF EXISTS patient_risk_profile_genetic_status_check,
     ALTER COLUMN genetic_status TYPE VARCHAR(20),
     ADD COLUMN race_ethnicity VARCHAR(80),
+    ADD COLUMN carrier_relative_status VARCHAR(8) CHECK (carrier_relative_status IN ('Yes','No','Unknown')),
     ADD COLUMN chest_radiation_status VARCHAR(8) CHECK (chest_radiation_status IN ('Yes','No','Unknown')),
     ADD COLUMN chest_radiation_years SMALLINT CHECK (chest_radiation_years BETWEEN 0 AND 100),
     ADD COLUMN high_risk_biopsy VARCHAR(7) CHECK (high_risk_biopsy IN ('None','ADH','ALH','LCIS','Unknown')),
     ADD COLUMN lifetime_risk_tool VARCHAR(50),
-    ADD COLUMN lifetime_risk_date DATE,
-    ADD COLUMN lifetime_risk_status VARCHAR(9) CHECK (lifetime_risk_status IN ('Done','Not done','Pending')),
     ADD COLUMN prior_biopsy_count SMALLINT CHECK (prior_biopsy_count BETWEEN 0 AND 100),
     ADD COLUMN prior_biopsy_atypia VARCHAR(8) CHECK (prior_biopsy_atypia IN ('Yes','No','Unknown')),
     ADD COLUMN personal_breast_cancer BOOLEAN,
@@ -76,8 +75,6 @@ ALTER TABLE encounter
     ADD COLUMN IF NOT EXISTS biopsy_followup_result VARCHAR(10)
       CHECK (biopsy_followup_result IN ('Benign','ADH/LCIS','Cancer')),
     ADD COLUMN IF NOT EXISTS biopsy_followup_date DATE,
-    ADD COLUMN IF NOT EXISTS geriatric_life_expectancy_over_10y BOOLEAN,
-    ADD COLUMN IF NOT EXISTS geriatric_serious_medical_conditions BOOLEAN;
 
 ALTER TABLE clinical_breast_exam
     ADD COLUMN IF NOT EXISTS inspection_status VARCHAR(12)

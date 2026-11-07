@@ -4,6 +4,9 @@ import pytest
 from pydantic import ValidationError
 
 from app.schemas import IntakeForm
+from app.assess import assess
+from app.plan_dates import due_dates
+from app.schemas import PlanOption
 
 
 TODAY = date(2026, 11, 7)
@@ -18,11 +21,12 @@ def base_payload() -> dict:
         "phone": "+923001234567",
         "evaluation_date": TODAY,
         "presentation": False,
+        "marital_status": "Unmarried",
         "race_ethnicity": "Not stated",
         "chest_radiation": "Unknown",
         "high_risk_biopsy": "None",
-        "lifetime_risk_status": "Not done",
         "genetic_status": "Never tested",
+        "carrier_relative_status": "Unknown",
         "prior_biopsy_count": 0,
         "prior_biopsy_atypia": "Unknown",
         "personal_breast_cancer": "Unknown",
@@ -48,6 +52,19 @@ def base_payload() -> dict:
 def test_no_imaging_yet_is_valid():
     form = IntakeForm(**base_payload())
     assert form.imaging == []
+
+
+def test_unmarried_patient_clears_marriage_related_fields():
+    form = IntakeForm(**(base_payload() | {
+        "parity": 2,
+        "age_first_birth": 25,
+        "pregnancy_history": "Yes",
+        "breastfeeding_history": "Yes",
+    }))
+    assert form.parity is None
+    assert form.age_first_birth is None
+    assert form.pregnancy_history.value == "Unknown"
+    assert form.breastfeeding_history.value == "Unknown"
 
 
 def test_empty_birads_is_rejected_when_an_imaging_row_is_present():
@@ -110,3 +127,39 @@ def test_future_imaging_date_is_rejected():
     }
     with pytest.raises(ValidationError, match="after the evaluation date"):
         IntakeForm(**payload)
+
+
+def test_assessment_is_incomplete_when_no_imaging_is_recorded():
+    result = assess(IntakeForm(**base_payload()))
+    assert result.tier == "Incomplete intake"
+    assert result.actionable is True
+    assert result.urgency == "Pending"
+    assert result.missing == ("Imaging",)
+
+
+def test_assessment_treats_birads_zero_as_recall_not_missing():
+    payload = base_payload() | {
+        "imaging_not_done": False,
+        "imaging": [{
+            "date": date(2026, 1, 1),
+            "modality": "Mammogram",
+            "density": "B",
+            "birads": 0,
+            "radiologist_name": "Dr Reader",
+        }],
+    }
+    result = assess(IntakeForm(**payload))
+    assert result.tier == "Imaging recall"
+    assert result.missing == ()
+
+
+def test_boundary_age_is_calculated_on_birthday():
+    payload = base_payload() | {
+        "date_of_birth": date(1951, 11, 7),
+    }
+    assert IntakeForm(**payload).age == 75
+
+
+def test_plan_dates_are_deterministic():
+    dates = due_dates([PlanOption.ANNUAL_DBT_MRI_6M], TODAY)
+    assert dates[PlanOption.ANNUAL_DBT_MRI_6M.value] == date(2027, 5, 8)

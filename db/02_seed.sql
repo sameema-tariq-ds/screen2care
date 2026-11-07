@@ -65,6 +65,10 @@ INSERT INTO patient_risk_profile
  ('BC-HR-014', 12, 'Premenopausal',  NULL, 0, NULL, 'Past',    false, NULL, 168, 57, 'Positive', 'BRCA1', NULL, NULL, 'Complete'),
  ('BC-HR-015', 13, 'Premenopausal',  NULL, 2, 26,   'Never',   false, NULL, 159, 66, 'Unknown',  NULL,    NULL, NULL, 'Pending');
 
+UPDATE patient_risk_profile
+SET genetic_status = 'Never tested'
+WHERE genetic_status = 'Unknown';
+
 -- Family history
 INSERT INTO family_history (patient_id, relation, relation_degree, cancer_type, age_at_diagnosis) VALUES
  ('BC-DL-006', 'Mother',        1,    'Breast',  55),
@@ -106,10 +110,6 @@ INSERT INTO encounter
  (15, 'BC-HR-015', '2026-10-25 10:00', 'Diagnostic',           true,  'Lump / mass: right breast',                  30,   3, 1);
 -- Move the ID counter past the explicit IDs
 SELECT setval(pg_get_serial_sequence('encounter', 'encounter_id'), (SELECT MAX(encounter_id) FROM encounter));
-
-INSERT INTO geriatric_assessment (encounter_id, end_stage_organ_failure_or_dementia, independent_in_adl, life_expectancy_over_10y) VALUES
- (5,  false, true,  NULL),   -- HP-005: clinician still needs to confirm life expectancy
- (12, true,  false, false);  -- HR-012: life expectancy < 3 years per disposition
 
 -- Clinical breast exam (one row per side)
 INSERT INTO clinical_breast_exam

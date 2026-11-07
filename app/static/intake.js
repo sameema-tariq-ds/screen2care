@@ -11,6 +11,11 @@ const number = (id) => value(id) === null ? null : Number(value(id));
 const bool = (id) => !$(id) || $(id).value === "" ? null : $(id).value === "true";
 const tri = (id) => value(id);
 const radio = (name) => form.querySelector(`input[name="${name}"]:checked`)?.value ?? null;
+const selectIds = ["marital_status", "prior_biopsy_atypia", "chest_radiation", "high_risk_biopsy", "genetic_status", "personal_breast_cancer", "personal_mastectomy", "pregnancy_history", "breastfeeding_history", "mri_pacemaker", "mri_implants", "mri_kidney_problems", "carrier_relative_status"];
+selectIds.forEach((id) => {
+  const select = $(id);
+  if (select && select.options[0]?.value !== "") select.insertBefore(new Option("Select...", ""), select.options[0]);
+});
 const isoToday = () => {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -33,8 +38,26 @@ function updateAge() {
   const height = number("height_cm"), weight = number("weight_kg");
   $("bmi_out").textContent = height && weight ? (weight / ((height / 100) ** 2)).toFixed(1) : "—";
   $("age_out_top").textContent = current ?? "—";
-  $("geriatric").hidden = current === null || current < 75;
 }
+
+function updateMaritalFields() {
+  const married = value("marital_status") === "Married";
+  $("married_fields").hidden = !married;
+  const pregnancy = $("pregnancy_history"), breastfeeding = $("breastfeeding_history");
+  pregnancy.closest("label").hidden = !married;
+  breastfeeding.closest("label").hidden = !married;
+  pregnancy.required = married;
+  breastfeeding.required = married;
+  if (!married) {
+    $("parity").value = "";
+    $("age_first_birth").value = "";
+    pregnancy.value = "Unknown";
+    breastfeeding.value = "Unknown";
+  }
+}
+
+$("marital_status").addEventListener("change", updateMaritalFields);
+updateMaritalFields();
 
 function updateExamFields(side) {
   const abnormalInspection = value(`${side}_inspection`) === "Abnormal";
@@ -43,6 +66,12 @@ function updateExamFields(side) {
   $(`${side}_mass_size`).hidden = !abnormalMass;
   $(`${side}_mass_mobility`).hidden = !abnormalMass;
   $(`${side}_mass_consistency`).hidden = !abnormalMass;
+  if (!abnormalInspection) $(`${side}_inspection_finding`).value = "";
+  if (!abnormalMass) {
+    $(`${side}_mass_size`).value = "";
+    $(`${side}_mass_mobility`).value = "";
+    $(`${side}_mass_consistency`).value = "";
+  }
 }
 
 ["r", "l"].forEach((side) => {
@@ -113,6 +142,8 @@ $("weight_kg").addEventListener("input", updateAge);
 updateAge();
 form.addEventListener("input", renderWarnings);
 form.addEventListener("change", renderWarnings);
+form.addEventListener("input", renderReview);
+form.addEventListener("change", renderReview);
 
 function exam(side) {
   return {
@@ -130,25 +161,23 @@ function repeated(container, fields) {
 }
 
 function payload() {
-  const life = radio("life_expectancy"), serious = radio("serious_conditions");
   const geneticStatus = value("genetic_status");
   return {
     full_name: value("full_name"), date_of_birth: value("date_of_birth"), national_id: value("national_id"), phone: value("phone"),
     evaluation_date: value("evaluation_date"), presentation: radio("presentation") === null ? null : radio("presentation") === "true",
     lump_side: value("lump_side"), lump_duration: value("lump_duration"), nipple_discharge_side: value("nipple_discharge_side"),
     nipple_discharge_color: value("nipple_discharge_color"), skin_changes: [...document.querySelectorAll('input[name="skin_changes"]:checked')].map(input => input.value), pain_type: value("pain_type"), pain_severity: number("pain_severity"),
-    race_ethnicity: value("race_ethnicity"), menarche_age: number("menarche_age"), menopausal_status: value("menopausal_status"), menopause_age: number("menopause_age"),
-    parity: number("parity"), age_first_birth: number("age_first_birth"), ocp_use: value("ocp_use"), hrt_use: tri("hrt_use"), hrt_duration_years: number("hrt_duration_years"),
+    race_ethnicity: value("race_ethnicity"), marital_status: value("marital_status"), menarche_age: number("menarche_age"), menopausal_status: value("menopausal_status"), menopause_age: number("menopause_age"),
+    parity: value("marital_status") === "Married" ? number("parity") : null, age_first_birth: value("marital_status") === "Married" ? number("age_first_birth") : null, ocp_use: value("ocp_use"), hrt_use: tri("hrt_use"), hrt_duration_years: number("hrt_duration_years"),
     chest_radiation: value("chest_radiation"), chest_radiation_age: number("chest_radiation_age"), chest_radiation_years: number("chest_radiation_years"),
-    high_risk_biopsy: value("high_risk_biopsy"), lifetime_risk_pct: number("lifetime_risk_pct"), lifetime_risk_tool: value("lifetime_risk_tool"), lifetime_risk_date: value("lifetime_risk_date"), lifetime_risk_status: value("lifetime_risk_status"),
-    genetic_status: geneticStatus, genetic_gene: value("genetic_gene"), genetic_gene_other: value("genetic_gene_other"), prior_biopsy_count: number("prior_biopsy_count"), prior_biopsy_atypia: value("prior_biopsy_atypia"),
-    personal_breast_cancer: tri("personal_breast_cancer"), personal_mastectomy: tri("personal_mastectomy"), pregnancy_history: tri("pregnancy_history"), breastfeeding_history: tri("breastfeeding_history"),
+    high_risk_biopsy: value("high_risk_biopsy"), lifetime_risk_tool: value("lifetime_risk_tool"),
+    genetic_status: geneticStatus, genetic_gene: value("genetic_gene"), genetic_gene_other: value("genetic_gene_other"), carrier_relative_status: value("carrier_relative_status"), prior_biopsy_count: number("prior_biopsy_count"), prior_biopsy_atypia: value("prior_biopsy_atypia"),
+    personal_breast_cancer: tri("personal_breast_cancer"), personal_mastectomy: tri("personal_mastectomy"), pregnancy_history: value("marital_status") === "Married" ? tri("pregnancy_history") : "Unknown", breastfeeding_history: value("marital_status") === "Married" ? tri("breastfeeding_history") : "Unknown",
     mri_pacemaker: tri("mri_pacemaker"), mri_implants: tri("mri_implants"), mri_kidney_problems: tri("mri_kidney_problems"), height_cm: number("height_cm"), weight_kg: number("weight_kg"),
     prior_breast_history: [...document.querySelectorAll('input[name="prior_breast_history"]:checked')].map(input => input.value), prior_breast_details: value("prior_breast_details"), family_history: repeated("family_entries", ["family_side", "relation", "cancer_type", "age_at_diagnosis"]), family_history_none: $("family_history_none").checked, family_history_reviewed: $("family_history_reviewed").checked,
     cbe_right: exam("r"), cbe_left: exam("l"), imaging: repeated("imaging_entries", ["date", "modality", "density", "birads", "radiologist_name"]), imaging_not_done: $("imaging_not_done").checked,
     plan: [...document.querySelectorAll("#plan_options input:checked")].map(input => input.value), warning_override_reason: value("warning_override_reason"), followup_months: number("followup_months"), examiner_name: value("examiner_name"), signed_date: value("signed_date"),
     notified_person: value("notified_person"), notified_at: value("notified_at"), patient_reached: bool("patient_reached"), biopsy_follow_up: value("biopsy_result") ? { result: value("biopsy_result"), date: value("biopsy_date") } : null,
-    geriatric_life_expectancy_over_10y: life === null ? null : life === "true", geriatric_serious_medical_conditions: serious === null ? null : serious === "true"
   };
 }
 
@@ -183,6 +212,7 @@ function setConditionalValidity(p) {
 }
 
 $("close_saved").addEventListener("click", () => $("saved_dialog").close());
+$("new_patient").addEventListener("click", () => window.location.reload());
 
 function warningMessages(p) {
   const warnings = [];
@@ -206,6 +236,28 @@ function renderWarnings() {
   }
   box.hidden = !warnings.length;
 }
+
+function renderReview() {
+  const p = payload();
+  const review = $("review_content");
+  review.replaceChildren();
+  const items = [
+    ["Patient", p.full_name || "Not entered"],
+    ["National ID", p.national_id || "Not entered"],
+    ["Presentation", p.presentation === null ? "Not selected" : (p.presentation ? "Symptomatic" : "Asymptomatic")],
+    ["Imaging", p.imaging_not_done ? "Not done yet" : `${p.imaging.length} entr${p.imaging.length === 1 ? "y" : "ies"}`],
+    ["Plan", p.plan.length ? p.plan.join(", ") : "Not selected"],
+    ["Examiner", p.examiner_name || "Not entered"],
+  ];
+  items.forEach(([label, text]) => {
+    const item = document.createElement("div"); item.className = "review-item";
+    const heading = document.createElement("strong"); heading.textContent = label;
+    const valueNode = document.createElement("span"); valueNode.textContent = text;
+    item.append(heading, valueNode); review.appendChild(item);
+  });
+}
+
+renderReview();
 
 let saved = false;
 form.addEventListener("submit", async (event) => {

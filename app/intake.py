@@ -3,7 +3,10 @@ from datetime import datetime, time
 
 from sqlalchemy import text
 
+from app.assess import assess
 from app.database import engine
+from app.handover import make_handover
+from app.plan_dates import due_dates
 from app.schemas import ExamStatus, IntakeForm, PlanOption, GeneticStatus
 
 ADMIN_STAFF_ID = 1
@@ -48,7 +51,22 @@ def _exam_params(exam):
 
 def save_intake(form: IntakeForm) -> dict:
     """Persist an intake atomically and record the submitted payload in the audit log."""
+    assessment = assess(form)
     with engine.begin() as conn:
+        existing = conn.execute(
+            text("SELECT patient_id, encounter_id FROM encounter WHERE idempotency_key = :key"),
+            {"key": form.idempotency_key},
+        ).mappings().first()
+        if existing:
+            return {
+                "patient_id": existing["patient_id"],
+                "encounter_id": existing["encounter_id"],
+                "duplicate": True,
+                "age": form.age,
+                "bmi": form.bmi,
+                "assessment": assessment.as_dict(),
+                "warnings": form.warnings(),
+            }
         patient_id = conn.execute(
             text("SELECT patient_id FROM patient WHERE national_id = :nid"), {"nid": form.national_id}
         ).scalar()
@@ -74,32 +92,32 @@ def save_intake(form: IntakeForm) -> dict:
         genetic_status = _value(form.genetic_status)
         conn.execute(text("""
             INSERT INTO patient_risk_profile
-              (patient_id, race_ethnicity, menarche_age, menopausal_status, menopause_age, parity,
+              (patient_id, race_ethnicity, carrier_relative_status, menarche_age, menopausal_status, menopause_age, parity,
                age_first_birth, ocp_use, hrt_use, hrt_duration_years, height_cm, weight_kg,
                genetic_status, genetic_mutation, chest_radiation_status, chest_radiation_age,
-               chest_radiation_years, high_risk_biopsy, lifetime_risk_pct, lifetime_risk_tool,
-               lifetime_risk_date, lifetime_risk_status, prior_biopsy_count, prior_biopsy_atypia,
+               chest_radiation_years, high_risk_biopsy, lifetime_risk_tool,
+               prior_biopsy_count, prior_biopsy_atypia,
                personal_breast_cancer, personal_breast_cancer_status, personal_mastectomy, personal_mastectomy_status,
                pregnancy_history, pregnancy_history_status, breastfeeding_history, breastfeeding_history_status,
                mri_pacemaker, mri_pacemaker_status, mri_implants, mri_implants_status, mri_kidney_problems,
                mri_kidney_problems_status, risk_data_status)
-            VALUES (:pid,:race,:menarche,:menopause,:menopause_age,:parity,:first_birth,:ocp,:hrt,:hrt_years,
+            VALUES (:pid,:race,:carrier,:menarche,:menopause,:menopause_age,:parity,:first_birth,:ocp,:hrt,:hrt_years,
                     :height,:weight,:genetic,:gene,:radiation,:radiation_age,:radiation_years,:lesion,
-                    :risk_pct,:risk_tool,:risk_date,:risk_status,:biopsy_count,:biopsy_atypia,:personal_cancer,
+                    :risk_tool,:biopsy_count,:biopsy_atypia,:personal_cancer,
                     :personal_cancer_status,:mastectomy,:mastectomy_status,:pregnancy,:pregnancy_status,
                     :breastfeeding,:breastfeeding_status,:pacemaker,:pacemaker_status,:implants,:implants_status,
                     :kidney,:kidney_status,:data_status)
             ON CONFLICT (patient_id) DO UPDATE SET
-              race_ethnicity=EXCLUDED.race_ethnicity, menarche_age=EXCLUDED.menarche_age,
+              race_ethnicity=EXCLUDED.race_ethnicity,
+              carrier_relative_status=EXCLUDED.carrier_relative_status, menarche_age=EXCLUDED.menarche_age,
               menopausal_status=EXCLUDED.menopausal_status, menopause_age=EXCLUDED.menopause_age,
               parity=EXCLUDED.parity, age_first_birth=EXCLUDED.age_first_birth, ocp_use=EXCLUDED.ocp_use,
               hrt_use=EXCLUDED.hrt_use, hrt_duration_years=EXCLUDED.hrt_duration_years,
               height_cm=EXCLUDED.height_cm, weight_kg=EXCLUDED.weight_kg, genetic_status=EXCLUDED.genetic_status,
               genetic_mutation=EXCLUDED.genetic_mutation, chest_radiation_status=EXCLUDED.chest_radiation_status,
               chest_radiation_age=EXCLUDED.chest_radiation_age, chest_radiation_years=EXCLUDED.chest_radiation_years,
-              high_risk_biopsy=EXCLUDED.high_risk_biopsy, lifetime_risk_pct=EXCLUDED.lifetime_risk_pct,
-              lifetime_risk_tool=EXCLUDED.lifetime_risk_tool, lifetime_risk_date=EXCLUDED.lifetime_risk_date,
-              lifetime_risk_status=EXCLUDED.lifetime_risk_status, prior_biopsy_count=EXCLUDED.prior_biopsy_count,
+              high_risk_biopsy=EXCLUDED.high_risk_biopsy,
+              lifetime_risk_tool=EXCLUDED.lifetime_risk_tool, prior_biopsy_count=EXCLUDED.prior_biopsy_count,
               prior_biopsy_atypia=EXCLUDED.prior_biopsy_atypia, personal_breast_cancer=EXCLUDED.personal_breast_cancer,
               personal_breast_cancer_status=EXCLUDED.personal_breast_cancer_status,
               personal_mastectomy=EXCLUDED.personal_mastectomy, personal_mastectomy_status=EXCLUDED.personal_mastectomy_status,
@@ -110,15 +128,15 @@ def save_intake(form: IntakeForm) -> dict:
               mri_kidney_problems=EXCLUDED.mri_kidney_problems, mri_kidney_problems_status=EXCLUDED.mri_kidney_problems_status,
               risk_data_status=EXCLUDED.risk_data_status, updated_at=now()
         """), {
-            "pid": patient_id, "race": form.race_ethnicity, "menarche": form.menarche_age,
+            "pid": patient_id, "race": form.race_ethnicity,
+            "carrier": _value(form.carrier_relative_status), "menarche": form.menarche_age,
             "menopause": form.menopausal_status, "menopause_age": form.menopause_age, "parity": form.parity,
             "first_birth": form.age_first_birth, "ocp": form.ocp_use, "hrt": _tri_bool(form.hrt_use),
             "hrt_years": form.hrt_duration_years, "height": form.height_cm, "weight": form.weight_kg,
             "genetic": genetic_status, "gene": gene, "radiation": _value(form.chest_radiation),
             "radiation_age": form.chest_radiation_age, "radiation_years": form.chest_radiation_years,
-            "lesion": _value(form.high_risk_biopsy), "risk_pct": form.lifetime_risk_pct,
-            "risk_tool": form.lifetime_risk_tool, "risk_date": form.lifetime_risk_date,
-            "risk_status": _value(form.lifetime_risk_status), "biopsy_count": form.prior_biopsy_count,
+            "lesion": _value(form.high_risk_biopsy), "risk_tool": _value(form.lifetime_risk_tool) if form.lifetime_risk_tool else None,
+            "biopsy_count": form.prior_biopsy_count,
             "biopsy_atypia": _value(form.prior_biopsy_atypia), "personal_cancer": _tri_bool(form.personal_breast_cancer),
             "personal_cancer_status": _value(form.personal_breast_cancer), "mastectomy": _tri_bool(form.personal_mastectomy),
             "mastectomy_status": _value(form.personal_mastectomy), "pregnancy": _tri_bool(form.pregnancy_history),
@@ -127,7 +145,7 @@ def save_intake(form: IntakeForm) -> dict:
             "pacemaker_status": _value(form.mri_pacemaker), "implants": _tri_bool(form.mri_implants),
             "implants_status": _value(form.mri_implants), "kidney": _tri_bool(form.mri_kidney_problems),
             "kidney_status": _value(form.mri_kidney_problems),
-            "data_status": "Complete" if form.lifetime_risk_status.value == "Done" else "Pending",
+            "data_status": "Pending",
         })
 
         for relative in form.family_history:
@@ -148,17 +166,17 @@ def save_intake(form: IntakeForm) -> dict:
         disposition = _disposition(form)
         encounter_id = conn.execute(text("""
             INSERT INTO encounter
-              (patient_id, encounter_date, encounter_type, is_symptomatic, chief_complaint, entered_by,
+              (patient_id, encounter_date, encounter_type, is_symptomatic, chief_complaint, entered_by, idempotency_key,
                lump_side, lump_duration, nipple_discharge_side, nipple_discharge_color, skin_changes,
                pain_type, pain_severity, disposition, followup_months, plan_options, warning_override_reason, examiner_name, signed_date,
-               notified_person, notified_at, patient_reached, biopsy_followup_result, biopsy_followup_date,
-               geriatric_life_expectancy_over_10y, geriatric_serious_medical_conditions)
-            VALUES (:pid,:date,:type,:symptomatic,:complaint,:by,:lump,:lump_duration,:discharge_side,
+               notified_person, notified_at, patient_reached, biopsy_followup_result, biopsy_followup_date)
+            VALUES (:pid,:date,:type,:symptomatic,:complaint,:by,:idempotency_key,:lump,:lump_duration,:discharge_side,
                     :discharge_color,:skin,:pain,:severity,:disposition,:followup,:plan,:override,:examiner,:signed,
-                    :notified,:notified_at,:reached,:biopsy_result,:biopsy_date,:life_expectancy,:serious)
+                    :notified,:notified_at,:reached,:biopsy_result,:biopsy_date)
             RETURNING encounter_id
         """), {"pid": patient_id, "date": form.evaluation_date, "type": "Diagnostic" if form.presentation else "Screening",
                "symptomatic": form.presentation, "complaint": _chief_complaint(form), "by": ADMIN_STAFF_ID,
+               "idempotency_key": form.idempotency_key,
                "lump": _value(form.lump_side) if form.lump_side else None, "lump_duration": form.lump_duration,
                "discharge_side": _value(form.nipple_discharge_side) if form.nipple_discharge_side else None,
                "discharge_color": form.nipple_discharge_color, "skin": form.skin_changes or None,
@@ -168,8 +186,33 @@ def save_intake(form: IntakeForm) -> dict:
                "notified_at": form.notified_at, "reached": form.patient_reached,
                "biopsy_result": form.biopsy_follow_up.result if form.biopsy_follow_up else None,
                "biopsy_date": form.biopsy_follow_up.date if form.biopsy_follow_up else None,
-               "life_expectancy": form.geriatric_life_expectancy_over_10y,
-               "serious": form.geriatric_serious_medical_conditions}).scalar()
+               }).scalar()
+
+        conn.execute(text("""
+            INSERT INTO assessments
+              (patient_id, encounter_id, tier, actionable, urgency, reasons, missing, rules_version)
+            VALUES (:pid, :eid, :tier, :actionable, :urgency, CAST(:reasons AS JSONB),
+                    CAST(:missing AS JSONB), :rules_version)
+        """), {"pid": patient_id, "eid": encounter_id, **{
+            "tier": assessment.tier, "actionable": assessment.actionable,
+            "urgency": assessment.urgency, "reasons": json.dumps(assessment.reasons),
+            "missing": json.dumps(assessment.missing), "rules_version": assessment.rules_version,
+        }})
+
+        for option, due_date in due_dates(form.plan, form.evaluation_date, form.followup_months).items():
+            conn.execute(text("""
+                INSERT INTO plan_items (patient_id, encounter_id, plan_option, due_date)
+                VALUES (:pid, :eid, :option, :due_date)
+            """), {"pid": patient_id, "eid": encounter_id, "option": option, "due_date": due_date})
+
+        handover = make_handover(patient_id, encounter_id, assessment)
+        conn.execute(text("""
+            INSERT INTO handover (patient_id, encounter_id, tier, actionable, urgency, contract)
+            VALUES (:pid, :eid, :tier, :actionable, :urgency, CAST(:contract AS JSONB))
+        """), {"pid": patient_id, "eid": encounter_id, "tier": handover.tier,
+               "actionable": handover.actionable, "urgency": handover.urgency,
+               "contract": json.dumps({"reasons": handover.reasons, "missing": handover.missing,
+                                        "rules_version": handover.rules_version})})
 
         for laterality, exam in (("R", form.cbe_right), ("L", form.cbe_left)):
             values = _exam_params(exam)
@@ -204,5 +247,7 @@ def save_intake(form: IntakeForm) -> dict:
         "returning_patient": returning,
         "age": form.age,
         "bmi": form.bmi,
+        "duplicate": False,
+        "assessment": assessment.as_dict(),
         "warnings": form.warnings(),
     }

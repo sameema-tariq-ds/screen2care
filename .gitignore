@@ -207,6 +207,7 @@ tempCodeRunnerFile.py
 
 # Ruff stuff:
 .ruff_cache/
+pytest-cache-files-*/
 
 # PyPI configuration file
 .pypirc

@@ -7,6 +7,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import text
 
 from app.database import engine
+from app.assess import assess
 from app.intake import save_intake
 from app.schemas import IntakeForm
 
@@ -97,3 +98,10 @@ def intake_form(request: Request):
 @app.post("/api/intake", status_code=201)
 def submit_intake(form: IntakeForm):
     return save_intake(form)
+
+
+@app.post("/api/intake/preview")
+def preview_intake(form: IntakeForm):
+    """Validate and assess without writing patient, encounter, or audit data."""
+    result = assess(form)
+    return {"assessment": result.as_dict(), "warnings": form.warnings(), "age": form.age, "bmi": form.bmi}
