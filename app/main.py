@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import text
 
-from app.database import engine
+from app.database import engine, ensure_runtime_schema
 from app.assess import assess
 from app.intake import save_intake
 from app.schemas import IntakeForm
@@ -16,6 +16,11 @@ BASE_DIR = Path(__file__).parent
 app = FastAPI(title="Screening-to-Care Loop")
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
+
+
+@app.on_event("startup")
+def apply_runtime_schema() -> None:
+    ensure_runtime_schema()
 
 # Latest imaging result per patient (highest BI-RADS wins; a mammogram with density beats US/MRI)
 PATIENT_LIST_SQL = text("""
@@ -68,13 +73,34 @@ def get_patient(patient_id: str):
             return [dict(r) for r in conn.execute(text(sql), {"pid": patient_id}).mappings()]
 
         return {
-            "patient": {k: v for k, v in patient.items() if k != "national_id"},
+            "patient": dict(patient),
             "risk_profile": rows("SELECT * FROM patient_risk_profile WHERE patient_id = :pid"),
             "family_history": rows("SELECT * FROM family_history WHERE patient_id = :pid"),
+            "biopsy_history": rows("SELECT procedure_date, result_summary FROM prior_breast_procedure WHERE patient_id = :pid AND procedure_type = 'Biopsy' ORDER BY procedure_date"),
             "encounters": rows("SELECT * FROM encounter WHERE patient_id = :pid ORDER BY encounter_date"),
             "imaging": rows("SELECT * FROM imaging_result WHERE patient_id = :pid ORDER BY result_released_at"),
+            "risk_assessments": rows("SELECT * FROM risk_assessment WHERE patient_id = :pid ORDER BY created_at DESC"),
+            "intake_history": rows("SELECT snapshot_id, encounter_id, payload, created_at FROM encounter_snapshot WHERE patient_id = :pid ORDER BY created_at DESC"),
             "flags": rows("SELECT flag FROM vw_data_quality_flags WHERE patient_id = :pid"),
         }
+
+
+@app.get("/api/patients/{patient_id}/encounters/{encounter_id}/snapshot")
+def get_encounter_snapshot(patient_id: str, encounter_id: int):
+    with engine.connect() as conn:
+        snapshot = conn.execute(text("""
+            SELECT snapshot_id, patient_id, encounter_id, payload, created_at
+            FROM encounter_snapshot
+            WHERE patient_id = :pid AND encounter_id = :eid
+        """), {"pid": patient_id, "eid": encounter_id}).mappings().first()
+        if snapshot is None:
+            raise HTTPException(status_code=404, detail="Intake snapshot not found")
+        result = dict(snapshot)
+        result["risk_assessment"] = dict(conn.execute(text("""
+            SELECT risk_assessment_id, tier, reasons, rules_version, examiner_name, created_at
+            FROM risk_assessment WHERE snapshot_id = :sid
+        """), {"sid": snapshot["snapshot_id"]}).mappings().first() or {})
+        return result
 
 
 @app.get("/api/data-quality-flags")

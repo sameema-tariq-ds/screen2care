@@ -1,5 +1,19 @@
 const $ = (id) => document.getElementById(id);
 const form = $("intake");
+// These fields are required even though their values are stored in the risk profile.
+["height_cm", "weight_kg"].forEach((id) => {
+  const control = $(id);
+  if (!control) return;
+  control.required = true;
+  const label = control.closest("label");
+  if (label && !label.querySelector(".req")) {
+    const marker = document.createElement("span");
+    marker.className = "req";
+    marker.textContent = "required";
+    label.insertBefore(marker, control);
+  }
+});
+if (new URLSearchParams(window.location.search).get("new") === "1") form.reset();
 function showClientFailure(message) {
   const box = $("form_error");
   if (box) { box.textContent = message; box.hidden = false; }
@@ -11,15 +25,235 @@ const number = (id) => value(id) === null ? null : Number(value(id));
 const bool = (id) => !$(id) || $(id).value === "" ? null : $(id).value === "true";
 const tri = (id) => value(id);
 const radio = (name) => form.querySelector(`input[name="${name}"]:checked`)?.value ?? null;
-const selectIds = ["marital_status", "prior_biopsy_atypia", "chest_radiation", "high_risk_biopsy", "genetic_status", "personal_breast_cancer", "personal_mastectomy", "pregnancy_history", "breastfeeding_history", "mri_pacemaker", "mri_implants", "mri_kidney_problems", "carrier_relative_status"];
+
+function setField(id, valueToSet) {
+  const field = $(id);
+  if (field && valueToSet !== null && valueToSet !== undefined) field.value = valueToSet;
+}
+
+function setSelect(id, valueToSet) {
+  const field = $(id);
+  if (!field || valueToSet === null || valueToSet === undefined) return;
+  if (![...field.options].some((option) => option.value === String(valueToSet))) field.add(new Option(valueToSet, valueToSet));
+  field.value = valueToSet;
+}
+
+function historyLabel(key) {
+  return key.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function hasHistoryValue(raw) {
+  if (raw === null || raw === undefined || raw === "") return false;
+  if (Array.isArray(raw)) return raw.some(hasHistoryValue);
+  if (typeof raw === "object") return Object.values(raw).some(hasHistoryValue);
+  return true;
+}
+
+function appendHistoryValue(container, raw) {
+  if (Array.isArray(raw)) {
+    raw.filter(hasHistoryValue).forEach((item) => {
+      const nested = document.createElement("div"); nested.className = "history-nested";
+      appendHistoryValue(nested, item); container.appendChild(nested);
+    });
+    return;
+  }
+  if (raw && typeof raw === "object") {
+    Object.entries(raw).forEach(([key, valueToShow]) => {
+      if (!hasHistoryValue(valueToShow)) return;
+      const item = document.createElement("div"); item.className = "history-item";
+      const label = document.createElement("strong"); label.textContent = historyLabel(key);
+      const valueNode = document.createElement("span");
+      item.append(label, valueNode); container.appendChild(item);
+      if (typeof valueToShow === "object") appendHistoryValue(valueNode, valueToShow);
+      else valueNode.textContent = String(valueToShow);
+    });
+    return;
+  }
+  const valueNode = document.createElement("span"); valueNode.textContent = String(raw); container.appendChild(valueNode);
+}
+
+function renderPreviousIntakes(history) {
+  const block = $("previous_intakes");
+  const cards = $("previous_intake_cards");
+  if (!block || !cards) return;
+  cards.replaceChildren();
+  if (history.length <= 1) {
+    block.hidden = true;
+    return;
+  }
+  history.forEach((snapshot, index) => {
+    const stored = typeof snapshot.payload === "string" ? JSON.parse(snapshot.payload) : (snapshot.payload || {});
+    const submitted = stored.submitted || stored;
+    const card = document.createElement("details");
+    card.className = "history-card";
+    const heading = document.createElement("summary");
+    heading.textContent = `Encounter ${snapshot.encounter_id ?? index + 1} · ${snapshot.created_at ? new Date(snapshot.created_at).toLocaleString() : "Saved intake"}`;
+    card.appendChild(heading);
+    const grid = document.createElement("div");
+    grid.className = "history-grid";
+    const hidden = new Set(["idempotency_key", "phone", "full_name", "date_of_birth", "signed_date", "patient_id"]);
+    Object.entries(submitted).forEach(([key, raw]) => {
+      if (hidden.has(key) || !hasHistoryValue(raw)) return;
+      const item = document.createElement("div"); item.className = "history-item history-top-item";
+      const label = document.createElement("strong"); label.textContent = historyLabel(key);
+      const valueNode = document.createElement("span"); item.append(label, valueNode);
+      if (typeof raw === "object") appendHistoryValue(valueNode, raw);
+      else valueNode.textContent = String(raw);
+      grid.appendChild(item);
+    });
+    card.appendChild(grid);
+    cards.appendChild(card);
+  });
+  block.hidden = false;
+}
+
+function prefillPatient(data) {
+  const patient = data.patient || {};
+  form.reset();
+  $("family_entries")?.replaceChildren();
+  $("imaging_entries")?.replaceChildren();
+  $("biopsy_entries")?.replaceChildren();
+  if ($("evaluation_date")) $("evaluation_date").value = isoToday();
+  if ($("signed_date")) $("signed_date").value = isoToday();
+  setField("patient_id", patient.patient_id);
+  setField("full_name", patient.full_name);
+  setField("date_of_birth", patient.date_of_birth);
+  setField("phone", patient.phone);
+  const biopsyNotDone = $("biopsy_not_done");
+  if (biopsyNotDone) biopsyNotDone.checked = false;
+  updateBiopsyMode();
+  updateAge();
+  updateMaritalFields();
+}
+
+async function findExistingPatient() {
+  const id = value("lookup_patient_id");
+  const message = $("lookup_message");
+  if (message) message.hidden = true;
+  if (!id) {
+    if (message) { message.textContent = "Enter a Patient ID."; message.hidden = false; }
+    return;
+  }
+  try {
+    const response = await fetch(`/api/patients/${encodeURIComponent(id)}`);
+    if (response.status === 404) throw new Error("Record not found.");
+    if (!response.ok) throw new Error("The patient record could not be loaded.");
+    const data = await response.json();
+    prefillPatient(data);
+    renderPreviousIntakes(data.intake_history || []);
+    setLookupEnabled(false);
+    $("patient_lookup").close();
+  } catch (error) {
+    if (message) { message.textContent = error.message; message.hidden = false; }
+  }
+}
+
+const lookupDialog = $("patient_lookup");
+const lookupInput = $("lookup_patient_id");
+const setLookupEnabled = (enabled) => { if (lookupInput) lookupInput.disabled = !enabled; };
+lookupDialog.addEventListener("close", () => setLookupEnabled(false));
+setLookupEnabled(false);
+const intakeParams = new URLSearchParams(window.location.search);
+if (intakeParams.get("lookup") === "1" || intakeParams.get("new") === "1") {
+  setLookupEnabled(true);
+  lookupDialog.showModal();
+}
+$("find_patient").addEventListener("click", findExistingPatient);
+$("cancel_lookup").addEventListener("click", () => { setLookupEnabled(false); window.location.href = "/"; });
+const selectIds = ["marital_status", "chest_radiation", "genetic_status", "pregnancy_history", "breastfeeding_history", "geriatric_end_stage_failure", "geriatric_adl_independent"];
+$("mri_pacemaker")?.closest(".subgroup")?.remove();
+
+function organizePersonalHistory() {
+  const personalSection = $("s2");
+  const familySection = $("s3");
+  const cbeSection = $("s4");
+  const imagingSection = $("s5");
+  const planSection = $("s6");
+  const reviewSection = null;
+  const source = personalSection?.querySelector(":scope > .grid");
+  if (!source || personalSection.dataset.organized) return;
+  personalSection.dataset.organized = "true";
+  const field = (id) => $(id)?.closest(".field");
+  ["race_ethnicity", "carrier_relative_status", "lifetime_risk_tool", "followup_months", "warning_override_reason", "notified_person", "notified_at", "patient_reached", "biopsy_result", "biopsy_date"].forEach((id) => field(id)?.remove());
+  const personalHistory = [...personalSection.querySelectorAll(":scope > .subgroup")].find((item) => item.querySelector("h3")?.textContent.includes("Personal breast history"));
+  const personalFields = personalHistory ? [...personalHistory.querySelectorAll(".field")].filter((field) => !["personal_breast_cancer", "personal_mastectomy"].includes(field.querySelector("select")?.id)) : [];
+  const row = (title, nodes) => {
+    const block = document.createElement("div"); block.className = "subgroup personal-organized";
+    const heading = document.createElement("h3"); heading.textContent = title;
+    const grid = document.createElement("div"); grid.className = "grid";
+    nodes.filter(Boolean).forEach((node) => grid.appendChild(node));
+    block.append(heading, grid); return block;
+  };
+  const bodyRow = row("Body measurements", [field("weight_kg"), field("height_cm"), field("bmi_out")?.closest(".field")]);
+  const obstetricRow = row("Marital and reproductive history", [field("marital_status"), field("menarche_age"), field("menopausal_status"), field("menopause_age"), $("married_fields"), field("ocp_use"), field("hrt_use"), field("hrt_duration_years"), ...personalFields]);
+  const radiationRow = row("Chest radiation history", [field("chest_radiation"), field("chest_radiation_age"), field("chest_radiation_years")]);
+  const geneticRow = row("Genetic history", [field("genetic_status"), field("genetic_gene")]);
+  const geriatricRow = row("Geriatric Assessment (Only if Patient Age >= 75)", [field("geriatric_end_stage_failure"), field("geriatric_adl_independent")]);
+  const priorHistory = document.createElement("label"); priorHistory.className = "field grid-span-full";
+  priorHistory.innerHTML = 'Prior breast history <span class="req">*</span><select id="prior_breast_history" required><option value="">Select...</option><option>None</option><option>Biopsy</option><option>Lumpectomy</option><option>Cyst Aspiration</option><option>Implants</option></select>';
+  const priorDetails = document.createElement("label"); priorDetails.className = "field grid-span-full";
+  priorDetails.innerHTML = 'Details/Pathology findings<textarea id="prior_breast_details" rows="2"></textarea>';
+  const updatePriorDetails = () => {
+    const selected = value("prior_breast_history");
+    const visible = selected && selected !== "None";
+    priorDetails.hidden = !visible;
+    const details = $("prior_breast_details");
+    if (!visible && details) details.value = "";
+  };
+  priorHistory.querySelector("select").addEventListener("change", updatePriorDetails);
+  updatePriorDetails();
+  const priorRow = row("Prior Breast History", [priorHistory, priorDetails]);
+  const biopsyHint = document.createElement("p"); biopsyHint.className = "hint"; biopsyHint.textContent = "Add each previous biopsy separately.";
+  const biopsyNotDone = document.createElement("label"); biopsyNotDone.className = "choice-row"; biopsyNotDone.innerHTML = '<input type="checkbox" id="biopsy_not_done"> No previous biopsy';
+  const biopsyEntries = document.createElement("div"); biopsyEntries.id = "biopsy_entries";
+  const addBiopsy = document.createElement("button"); addBiopsy.type = "button"; addBiopsy.className = "secondary biopsy-add"; addBiopsy.id = "add_biopsy"; addBiopsy.textContent = "Add biopsy entry";
+  personalHistory?.remove(); source.remove();
+
+  const rename = (id, number, title) => { const block = $(id); block.querySelector("h2").innerHTML = `<span class="num">${number}</span>${title}`; return block; };
+  rename("s1", 1, "Patient Demographics &amp; Baseline Data");
+  const presentation = $("s1").querySelector("fieldset");
+  const symptoms = $("s1").querySelectorAll(":scope > .grid")[1];
+  const complaint = document.createElement("section"); complaint.className = "block"; complaint.id = "s2"; complaint.innerHTML = '<h2><span class="num">2</span>Chief Complaint &amp; Presenting Symptoms</h2>';
+  if (presentation) complaint.appendChild(presentation); if (symptoms) complaint.appendChild(symptoms); $("s1").after(complaint);
+  personalSection.id = "s4"; rename("s4", 4, "Personal Medical History"); personalSection.append(priorRow, bodyRow, radiationRow, geneticRow, geriatricRow);
+  const obstetric = document.createElement("section"); obstetric.className = "block"; obstetric.id = "s3"; obstetric.innerHTML = '<h2><span class="num">3</span>Obstetric &amp; Gynecological History</h2>'; obstetric.appendChild(obstetricRow); personalSection.before(obstetric);
+  familySection.id = "s5"; rename("s5", 5, "Family History of Cancer");
+  cbeSection.id = "s6"; rename("s6", 6, "Clinical Breast Examination (CBE)");
+  imagingSection.id = "s7"; rename("s7", 7, "Imaging Assessment");
+  const biopsy = document.createElement("section"); biopsy.className = "block"; biopsy.id = "s8"; biopsy.innerHTML = '<h2><span class="num">8</span>Biopsy Assessment</h2>'; biopsy.append(biopsyHint, biopsyNotDone, biopsyEntries, addBiopsy); imagingSection.after(biopsy);
+  planSection.id = "s9"; rename("s9", 9, "Clinical Plan &amp; Disposition");
+  const nav = document.querySelector(".toc"); if (nav) { nav.replaceChildren(); [["s1", "1 Patient Demographics & Baseline Data"], ["s2", "2 Chief Complaint & Presenting Symptoms"], ["s3", "3 Obstetric & Gynecological History"], ["s4", "4 Personal Medical History"], ["s5", "5 Family History of Cancer"], ["s6", "6 Clinical Breast Examination (CBE)"], ["s7", "7 Imaging Assessment"], ["s8", "8 Biopsy Assessment"], ["s9", "9 Clinical Plan & Disposition"]].forEach(([href, label]) => { const link = document.createElement("a"); link.href = `#${href}`; link.textContent = label; nav.appendChild(link); }); }
+}
+
+organizePersonalHistory();
+
+function formatClinicalExamTable() {
+  const section = $("s6");
+  if (!section) return;
+  const hint = section.querySelector(".hint");
+  if (hint) hint.textContent = "Complete both breasts using the 4-quadrant clock-face layout. Not answered is not treated as normal.";
+  const headers = section.querySelectorAll(".cbe thead th");
+  ["Feature checked", "Right breast findings", "Left breast findings"].forEach((text, index) => { if (headers[index]) headers[index].textContent = text; });
+  [["r_mass", "No Mass", "Mass Present"], ["l_mass", "No Mass", "Mass Present"], ["r_nodes", "Not Palpable", "Palpable"], ["l_nodes", "Not Palpable", "Palpable"]].forEach(([id, normal, abnormal]) => {
+    const select = $(id);
+    if (!select) return;
+    const options = [...select.options];
+    const normalOption = options.find((option) => option.value === "Normal");
+    const abnormalOption = options.find((option) => option.value === "Abnormal");
+    if (normalOption) normalOption.textContent = normal;
+    if (abnormalOption) abnormalOption.textContent = abnormal;
+  });
+}
+
+formatClinicalExamTable();
 selectIds.forEach((id) => {
   const select = $(id);
   if (select && select.options[0]?.value !== "") select.insertBefore(new Option("Select...", ""), select.options[0]);
 });
-const isoToday = () => {
+function isoToday() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-};
+}
 
 $("evaluation_date").value = isoToday();
 $("signed_date").value = isoToday();
@@ -34,18 +268,111 @@ function age() {
 
 function updateAge() {
   const current = age();
-  $("age_out").textContent = current ?? "—";
+  updateMenopauseVisibility();
+  updateHrtVisibility();
+  updateGeriatricVisibility();
+  const ageOutput = $("age_out");
+  const bmiOutput = $("bmi_out");
+  const topAgeOutput = $("age_out_top");
+  if (ageOutput) ageOutput.textContent = current ?? "—";
   const height = number("height_cm"), weight = number("weight_kg");
-  $("bmi_out").textContent = height && weight ? (weight / ((height / 100) ** 2)).toFixed(1) : "—";
-  $("age_out_top").textContent = current ?? "—";
+  if (bmiOutput) bmiOutput.textContent = height && weight ? (weight / ((height / 100) ** 2)).toFixed(1) : "—";
+  if (topAgeOutput) topAgeOutput.textContent = current ?? "—";
 }
+
+function updateGeriatricVisibility() {
+  const visible = age() !== null && age() >= 75;
+  ["geriatric_end_stage_failure", "geriatric_adl_independent"].forEach((id) => {
+    const input = $(id); if (!input) return;
+    input.closest(".field").hidden = !visible;
+    if (!visible) input.value = "";
+  });
+}
+
+function updateGeneticVisibility() {
+  const visible = ["Positive", "Negative"].includes(value("genetic_status"));
+  const field = $("genetic_gene_field");
+  if (field) field.hidden = !visible;
+  if (!visible && $("genetic_gene")) $("genetic_gene").value = "";
+}
+
+function updateMenopauseVisibility() {
+  const current = age();
+  const menopausalStatus = $("menopausal_status");
+  const menopauseAge = $("menopause_age");
+  const statusVisible = current !== null && current >= 40;
+  const ageVisible = statusVisible && value("menopausal_status") === "Postmenopausal";
+  if (menopausalStatus?.closest(".field")) menopausalStatus.closest(".field").hidden = !statusVisible;
+  if (menopauseAge?.closest(".field")) menopauseAge.closest(".field").hidden = !ageVisible;
+  if (!statusVisible) {
+    if (menopausalStatus) menopausalStatus.value = "";
+    if (menopauseAge) menopauseAge.value = "";
+  } else if (!ageVisible && menopauseAge) {
+    menopauseAge.value = "";
+  }
+}
+
+function updateHrtVisibility() {
+  const current = age();
+  const visible = current !== null && current >= 45 && current <= 55;
+  ["hrt_use", "hrt_duration_years"].forEach((id) => {
+    const input = $(id);
+    if (!input) return;
+    const field = input.closest(".field");
+    if (field) field.hidden = !visible;
+    if (!visible) input.value = "";
+  });
+}
+
+function updateRadiationFields() {
+  const visible = value("chest_radiation") === "Yes";
+  ["chest_radiation_age", "chest_radiation_years"].forEach((id) => {
+    const input = $(id);
+    if (input) {
+      input.closest(".field").hidden = !visible;
+      if (!visible) input.value = "";
+    }
+  });
+}
+
+function updatePresentationFields() {
+  const symptomatic = radio("presentation") === "true";
+  ["lump_side", "lump_duration", "nipple_discharge_side", "nipple_discharge_color", "pain_type", "pain_severity"].forEach((id) => {
+    const field = $(id);
+    if (field) field.closest(".field").hidden = !symptomatic;
+  });
+  const skin = document.querySelector('input[name="skin_changes"]');
+  if (skin) skin.closest(".field").hidden = !symptomatic;
+  const dischargeColour = $("nipple_discharge_color")?.closest(".field");
+  if (dischargeColour) dischargeColour.hidden = !symptomatic || !value("nipple_discharge_side");
+  if (!symptomatic) {
+    ["lump_side", "lump_duration", "nipple_discharge_side", "nipple_discharge_color", "pain_type", "pain_severity"].forEach((id) => { if ($(id)) $(id).value = ""; });
+    document.querySelectorAll('input[name="skin_changes"]').forEach((input) => { input.checked = false; });
+  }
+}
+
+document.querySelectorAll('input[name="presentation"]').forEach((input) => input.addEventListener("change", updatePresentationFields));
+$("nipple_discharge_side")?.addEventListener("change", updatePresentationFields);
+updatePresentationFields();
+$("chest_radiation")?.addEventListener("change", updateRadiationFields);
+updateRadiationFields();
+$("genetic_status")?.addEventListener("change", updateGeneticVisibility);
+updateGeneticVisibility();
+
+$("hrt_use")?.addEventListener("change", () => {
+  if (value("hrt_use") !== "Yes" && $("hrt_duration_years")) $("hrt_duration_years").value = "";
+  updateHrtVisibility();
+});
+$("menopausal_status")?.addEventListener("change", updateMenopauseVisibility);
 
 function updateMaritalFields() {
   const married = value("marital_status") === "Married";
-  $("married_fields").hidden = !married;
+  const marriedFields = $("married_fields");
+  if (marriedFields) marriedFields.hidden = !married;
   const pregnancy = $("pregnancy_history"), breastfeeding = $("breastfeeding_history");
-  pregnancy.closest("label").hidden = !married;
-  breastfeeding.closest("label").hidden = !married;
+  if (pregnancy?.closest("label")) pregnancy.closest("label").hidden = !married;
+  if (breastfeeding?.closest("label")) breastfeeding.closest("label").hidden = !married;
+  if (!pregnancy || !breastfeeding) return;
   pregnancy.required = married;
   breastfeeding.required = married;
   if (!married) {
@@ -63,10 +390,16 @@ function updateExamFields(side) {
   const abnormalInspection = value(`${side}_inspection`) === "Abnormal";
   const abnormalMass = value(`${side}_mass`) === "Abnormal";
   $(`${side}_inspection_finding`).hidden = !abnormalInspection;
+  $(`${side}_nipple_discharge_color`).hidden = !abnormalInspection;
+  $(`${side}_skin_change`).hidden = !abnormalInspection;
   $(`${side}_mass_size`).hidden = !abnormalMass;
   $(`${side}_mass_mobility`).hidden = !abnormalMass;
   $(`${side}_mass_consistency`).hidden = !abnormalMass;
   if (!abnormalInspection) $(`${side}_inspection_finding`).value = "";
+  if (!abnormalInspection) {
+    $(`${side}_nipple_discharge_color`).value = "";
+    $(`${side}_skin_change`).value = "";
+  }
   if (!abnormalMass) {
     $(`${side}_mass_size`).value = "";
     $(`${side}_mass_mobility`).value = "";
@@ -83,10 +416,12 @@ function updateExamFields(side) {
 function addFamily() {
   const row = document.createElement("div");
   row.className = "grid repeat-row family-row";
-  row.innerHTML = `<label class="field">Family side<select data-field="family_side"><option>Mother's side</option><option>Father's side</option><option>Unknown side</option></select></label>
-    <label class="field">Relation<select data-field="relation" required><option value="">Select relation</option><option>Mother</option><option>Father</option><option>Sister</option><option>Brother</option><option>Daughter</option><option>Son</option><option>Maternal aunt</option><option>Paternal aunt</option><option>Grandmother</option><option>Other</option></select></label>
-    <label class="field">Cancer type<select data-field="cancer_type"><option>Breast</option><option>Ovarian</option><option>Pancreatic</option><option>Prostate</option><option>Other</option></select></label>
+  row.innerHTML = `<input type="hidden" data-field="family_side" value="Unknown side">
+    <label class="field">Relation<input data-field="relation" required placeholder="e.g. Mother, sister, aunt"></label>
+    <label class="field">Blood relative<select data-field="relation_degree" required><option value="">Select...</option><option value="1">First</option><option value="2">Second</option></select></label>
     <label class="field">Age at diagnosis<input data-field="age_at_diagnosis" type="number" min="1" max="120" required></label>
+    <label class="field">Cancer type<select data-field="cancer_type" required><option value="">Select...</option><option>Breast</option><option>Ovarian</option></select></label>
+    <label class="field">Known Genetic Mutations<select data-field="known_genetic_mutations" required><option value="">Select...</option><option>BRCA1</option><option>BRCA2</option><option>Negative</option><option>Unknown</option></select></label>
     <button type="button" class="secondary remove">Remove</button>`;
   row.querySelector(".remove").onclick = () => row.remove();
   $("family_entries").appendChild(row);
@@ -95,22 +430,48 @@ function addFamily() {
 function addImaging() {
   const row = document.createElement("div");
   row.className = "grid repeat-row imaging-row";
-  row.innerHTML = `<input data-field="date" type="date" required><select data-field="modality"><option>Mammogram</option><option>DBT</option><option>MRI</option></select>
-    <select data-field="density"><option value="">Density (MRI not applicable)</option><option>A</option><option>B</option><option>C</option><option>D</option></select>
+  row.innerHTML = `<input data-field="date" type="date" required><select data-field="modality"><option value="Mammogram">Standard Mammo</option><option value="DBT">DBT (3D mammo)</option><option value="Ultrasound">Ultrasound</option><option value="MRI">MRI</option></select>
+    <select data-field="density"><option value="">Density</option><option>A</option><option>B</option><option>C</option><option>D</option></select>
     <input data-field="birads" type="number" min="0" max="6" placeholder="BI-RADS 0–6" required>
-    <input data-field="radiologist_name" placeholder="Radiologist name" required><button type="button" class="secondary remove">Remove</button>`;
+    <button type="button" class="secondary remove">Remove</button>`;
   row.querySelector(".remove").onclick = () => row.remove();
   const modality = row.querySelector('[data-field="modality"]');
   const density = row.querySelector('[data-field="density"]');
   const updateDensity = () => {
-    const isMRI = modality.value === "MRI";
-    density.hidden = isMRI;
-    if (isMRI) density.value = "";
+    const densityNotApplicable = ["MRI", "Ultrasound"].includes(modality.value);
+    density.hidden = densityNotApplicable;
+    if (densityNotApplicable) density.value = "";
   };
   modality.addEventListener("change", updateDensity);
   updateDensity();
   $("imaging_entries").appendChild(row);
 }
+
+function addBiopsy() {
+  const row = document.createElement("div");
+  row.className = "grid repeat-row biopsy-row";
+  row.innerHTML = `<label class="field">Biopsy date<input data-field="date" type="date" required></label>
+    <label class="field">Result<select data-field="result" required><option value="">Select...</option><option>Benign</option><option>ADH/LCIS</option><option>Cancer</option><option>Unknown</option></select></label>
+    <label class="field">Details<input data-field="details" placeholder="Optional details"></label>
+    <button type="button" class="secondary remove">Remove</button>`;
+  row.querySelector(".remove").onclick = () => row.remove();
+  $("biopsy_entries").appendChild(row);
+}
+
+function updateBiopsyMode() {
+  const checkbox = $("biopsy_not_done");
+  const entries = $("biopsy_entries");
+  const addButton = $("add_biopsy");
+  if (!checkbox || !entries || !addButton) return;
+  const disabled = checkbox.checked;
+  entries.hidden = disabled;
+  addButton.hidden = disabled;
+  if (disabled) entries.replaceChildren();
+}
+
+$("add_biopsy").addEventListener("click", addBiopsy);
+$("biopsy_not_done").addEventListener("change", updateBiopsyMode);
+updateBiopsyMode();
 
 $("add_family").onclick = addFamily;
 $("add_imaging").onclick = addImaging;
@@ -122,11 +483,6 @@ function updateFamilyMode() {
 }
 
 $("family_history_none").addEventListener("change", (event) => {
-  if (event.target.checked) $("family_history_reviewed").checked = false;
-  updateFamilyMode();
-});
-$("family_history_reviewed").addEventListener("change", (event) => {
-  if (event.target.checked) $("family_history_none").checked = false;
   updateFamilyMode();
 });
 updateFamilyMode();
@@ -148,6 +504,7 @@ form.addEventListener("change", renderReview);
 function exam(side) {
   return {
     inspection: value(`${side}_inspection`), inspection_finding: value(`${side}_inspection_finding`),
+    nipple_discharge_color: value(`${side}_nipple_discharge_color`), skin_change: value(`${side}_skin_change`),
     mass: value(`${side}_mass`), mass_size_mm: number(`${side}_mass_size`), mass_mobility: value(`${side}_mass_mobility`),
     mass_consistency: value(`${side}_mass_consistency`), axillary_nodes: value(`${side}_nodes`)
   };
@@ -163,21 +520,19 @@ function repeated(container, fields) {
 function payload() {
   const geneticStatus = value("genetic_status");
   return {
-    full_name: value("full_name"), date_of_birth: value("date_of_birth"), national_id: value("national_id"), phone: value("phone"),
+    full_name: value("full_name"), date_of_birth: value("date_of_birth"), patient_id: value("patient_id"), phone: value("phone"),
     evaluation_date: value("evaluation_date"), presentation: radio("presentation") === null ? null : radio("presentation") === "true",
     lump_side: value("lump_side"), lump_duration: value("lump_duration"), nipple_discharge_side: value("nipple_discharge_side"),
     nipple_discharge_color: value("nipple_discharge_color"), skin_changes: [...document.querySelectorAll('input[name="skin_changes"]:checked')].map(input => input.value), pain_type: value("pain_type"), pain_severity: number("pain_severity"),
-    race_ethnicity: value("race_ethnicity"), marital_status: value("marital_status"), menarche_age: number("menarche_age"), menopausal_status: value("menopausal_status"), menopause_age: number("menopause_age"),
-    parity: value("marital_status") === "Married" ? number("parity") : null, age_first_birth: value("marital_status") === "Married" ? number("age_first_birth") : null, ocp_use: value("ocp_use"), hrt_use: tri("hrt_use"), hrt_duration_years: number("hrt_duration_years"),
+    marital_status: value("marital_status"), menarche_age: number("menarche_age"), menopausal_status: value("menopausal_status"), menopause_age: number("menopause_age"),
+    parity: value("marital_status") === "Married" ? number("parity") : null, age_first_birth: value("marital_status") === "Married" ? number("age_first_birth") : null, ocp_use: value("ocp_use"), hrt_use: value("hrt_use"), hrt_duration_years: number("hrt_duration_years"),
     chest_radiation: value("chest_radiation"), chest_radiation_age: number("chest_radiation_age"), chest_radiation_years: number("chest_radiation_years"),
-    high_risk_biopsy: value("high_risk_biopsy"), lifetime_risk_tool: value("lifetime_risk_tool"),
-    genetic_status: geneticStatus, genetic_gene: value("genetic_gene"), genetic_gene_other: value("genetic_gene_other"), carrier_relative_status: value("carrier_relative_status"), prior_biopsy_count: number("prior_biopsy_count"), prior_biopsy_atypia: value("prior_biopsy_atypia"),
-    personal_breast_cancer: tri("personal_breast_cancer"), personal_mastectomy: tri("personal_mastectomy"), pregnancy_history: value("marital_status") === "Married" ? tri("pregnancy_history") : "Unknown", breastfeeding_history: value("marital_status") === "Married" ? tri("breastfeeding_history") : "Unknown",
-    mri_pacemaker: tri("mri_pacemaker"), mri_implants: tri("mri_implants"), mri_kidney_problems: tri("mri_kidney_problems"), height_cm: number("height_cm"), weight_kg: number("weight_kg"),
-    prior_breast_history: [...document.querySelectorAll('input[name="prior_breast_history"]:checked')].map(input => input.value), prior_breast_details: value("prior_breast_details"), family_history: repeated("family_entries", ["family_side", "relation", "cancer_type", "age_at_diagnosis"]), family_history_none: $("family_history_none").checked, family_history_reviewed: $("family_history_reviewed").checked,
-    cbe_right: exam("r"), cbe_left: exam("l"), imaging: repeated("imaging_entries", ["date", "modality", "density", "birads", "radiologist_name"]), imaging_not_done: $("imaging_not_done").checked,
-    plan: [...document.querySelectorAll("#plan_options input:checked")].map(input => input.value), warning_override_reason: value("warning_override_reason"), followup_months: number("followup_months"), examiner_name: value("examiner_name"), signed_date: value("signed_date"),
-    notified_person: value("notified_person"), notified_at: value("notified_at"), patient_reached: bool("patient_reached"), biopsy_follow_up: value("biopsy_result") ? { result: value("biopsy_result"), date: value("biopsy_date") } : null,
+    genetic_status: geneticStatus, genetic_gene: value("genetic_gene"), genetic_gene_other: value("genetic_gene_other"),
+    personal_breast_cancer: "Unknown", personal_mastectomy: "Unknown", pregnancy_history: value("marital_status") === "Married" ? tri("pregnancy_history") : "Unknown", breastfeeding_history: value("marital_status") === "Married" ? tri("breastfeeding_history") : "Unknown",
+    height_cm: number("height_cm"), weight_kg: number("weight_kg"),
+    prior_breast_history: value("prior_breast_history"), prior_breast_details: value("prior_breast_details"), biopsy_history: repeated("biopsy_entries", ["date", "result", "details"]), biopsy_not_done: $("biopsy_not_done").checked, family_history: repeated("family_entries", ["family_side", "relation", "relation_degree", "cancer_type", "age_at_diagnosis", "known_genetic_mutations"]), family_history_none: $("family_history_none").checked, family_history_reviewed: false,
+    cbe_right: exam("r"), cbe_left: exam("l"), imaging: repeated("imaging_entries", ["date", "modality", "density", "birads"]), imaging_not_done: $("imaging_not_done").checked,
+    plan: [...document.querySelectorAll("#plan_options input:checked")].map(input => input.value), clinician_notes: value("clinician_notes"), examiner_name: value("examiner_name"), signed_date: value("signed_date"),
   };
 }
 
@@ -192,6 +547,40 @@ function showErrors(messages) {
   box.hidden = !messages.length;
 }
 
+function controlLabel(control) {
+  const fieldset = control.closest("fieldset");
+  if (fieldset && (control.type === "radio" || control.type === "checkbox")) {
+    const legend = fieldset.querySelector("legend");
+    if (legend) return legend.textContent.replace(/\*/g, "").replace(/required/gi, "").trim();
+  }
+  const planOptions = control.closest("#plan_options");
+  if (planOptions) return "Plan";
+  const tableRow = control.closest("tr");
+  if (tableRow) {
+    const finding = tableRow.querySelector("th")?.textContent.trim();
+    const cell = control.closest("td");
+    const side = cell && [...tableRow.querySelectorAll("td")].indexOf(cell) === 0 ? "right" : "left";
+    if (finding) return `${finding} (${side})`;
+  }
+  const label = control.closest("label");
+  if (label) return label.textContent.replace(/\*/g, "").replace(/required/gi, "").trim();
+  return control.getAttribute("aria-label") || control.id || "Unnamed field";
+}
+
+function missingFieldMessages() {
+  const invalidControls = [...form.querySelectorAll("input, select, textarea")]
+    .filter((control) => !control.disabled && !control.checkValidity());
+  form.querySelectorAll("input, select, textarea").forEach((control) => {
+    control.classList.toggle("invalid", invalidControls.includes(control));
+  });
+  const labels = [...new Set(invalidControls.map(controlLabel))];
+  if (invalidControls.length) {
+    invalidControls[0].scrollIntoView({ behavior: "smooth", block: "center" });
+    invalidControls[0].focus({ preventScroll: true });
+  }
+  return labels;
+}
+
 function showSuccess(message) {
   const box = $("form_success");
   box.textContent = message;
@@ -199,9 +588,7 @@ function showSuccess(message) {
 }
 
 function setConditionalValidity(p) {
-  const familyError = !p.family_history_reviewed && !p.family_history_none
-    ? "Select either no relevant family history or family history fully reviewed."
-    : "";
+  const familyError = "";
   const imagingError = !p.imaging_not_done && !p.imaging.length
     ? "Add an imaging entry or select 'Imaging has not been done yet'."
     : "";
@@ -211,8 +598,7 @@ function setConditionalValidity(p) {
   if (planControl) planControl.setCustomValidity(p.plan.length ? "" : "Select a plan option.");
 }
 
-$("close_saved").addEventListener("click", () => $("saved_dialog").close());
-$("new_patient").addEventListener("click", () => window.location.reload());
+$("close_saved").addEventListener("click", () => { window.location.href = "/"; });
 
 function warningMessages(p) {
   const warnings = [];
@@ -221,7 +607,6 @@ function warningMessages(p) {
   if (p.imaging.some((scan) => [4, 5, 6].includes(scan.birads)) && !p.plan.includes("Urgent biopsy referral")) warnings.push("BI-RADS 4–6 normally needs urgent biopsy referral.");
   if (p.imaging.some((scan) => scan.birads === 3) && p.plan.includes("Routine rescreening")) warnings.push("BI-RADS 3 normally needs short-term follow-up.");
   if (p.imaging.some((scan) => ["C", "D"].includes(scan.density)) && p.plan.includes("Routine rescreening")) warnings.push("Dense breast tissue may need supplemental imaging review.");
-  if (p.plan.includes("Annual MRI") && [p.mri_pacemaker, p.mri_kidney_problems].includes("Yes")) warnings.push("MRI safety concern selected; confirm specialist clearance.");
   return warnings;
 }
 
@@ -240,11 +625,18 @@ function renderWarnings() {
 function renderReview() {
   const p = payload();
   const review = $("review_content");
+  if (!review) return;
   review.replaceChildren();
+  const skinChanges = p.skin_changes.length ? p.skin_changes.join(", ") : "None";
+  const nippleDischarge = [p.nipple_discharge_side, p.nipple_discharge_color].filter(Boolean).join(" · ") || "None";
   const items = [
     ["Patient", p.full_name || "Not entered"],
-    ["National ID", p.national_id || "Not entered"],
+    ["Patient ID", p.patient_id || "Not entered"],
     ["Presentation", p.presentation === null ? "Not selected" : (p.presentation ? "Symptomatic" : "Asymptomatic")],
+    ["Lump", p.lump_side || "None"],
+    ["Nipple discharge", nippleDischarge],
+    ["Skin changes", skinChanges],
+    ["Pain", p.pain_type || "None"],
     ["Imaging", p.imaging_not_done ? "Not done yet" : `${p.imaging.length} entr${p.imaging.length === 1 ? "y" : "ies"}`],
     ["Plan", p.plan.length ? p.plan.join(", ") : "Not selected"],
     ["Examiner", p.examiner_name || "Not entered"],
@@ -260,16 +652,39 @@ function renderReview() {
 renderReview();
 
 let saved = false;
+function renderSavedResult(body) {
+  const risk = body.risk_assessment || {};
+  const alertText = risk.alert_trigger || ({ High: "CRITICAL HIGH-RISK CARE ROUTING ACTIVE", Medium: "DENSE TISSUE MASKING RISK / SHORT-INTERVAL TRACKING", Low: "ROUTINE SCREENING ELIGIBLE" }[risk.tier] || "RISK ASSESSMENT PENDING");
+  $("risk_alert").textContent = alertText;
+  $("risk_alert").className = `risk-${String(risk.tier || "incomplete").toLowerCase()}`;
+  const riskText = risk.label || (risk.tier === "Low" ? "Low (lifetime risk not assessed)" : risk.tier) || "Incomplete";
+  $("risk_label").textContent = riskText;
+  $("risk_label").className = `risk-${String(risk.tier || "incomplete").toLowerCase()}`;
+  const reasons = $("risk_reasons"); reasons.replaceChildren();
+  (risk.reasons || []).forEach((reason) => { const li = document.createElement("li"); li.textContent = reason; reasons.appendChild(li); });
+  if (!reasons.children.length) { const li = document.createElement("li"); li.textContent = "No triggering factors recorded."; reasons.appendChild(li); }
+  const plan = $("doctor_plan"); plan.replaceChildren();
+  (body.doctor_plan || []).forEach((item) => { const li = document.createElement("li"); li.textContent = item.due_date ? `${item.option} — due ${item.due_date}` : item.option; plan.appendChild(li); });
+  (body.doctor_plan || []).forEach((item, index) => {
+    if (!item.recurrence || !plan.children[index]) return;
+    const recurrence = document.createElement("small"); recurrence.textContent = item.recurrence;
+    plan.children[index].appendChild(recurrence);
+  });
+  if (!plan.children.length) { const li = document.createElement("li"); li.textContent = "No plan selected."; plan.appendChild(li); }
+}
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const p = payload();
   const errors = [];
   setConditionalValidity(p);
   if (!form.checkValidity()) {
-    errors.push("Complete all required fields marked with *.");
+    const missing = missingFieldMessages();
+    errors.push(missing.length
+      ? `Please complete: ${missing.join(", ")}.`
+      : "Complete all required fields marked with *.");
     form.reportValidity();
   }
-  if (warningMessages(p).length && !p.warning_override_reason) errors.push("Enter an override reason for the displayed warning.");
   showErrors(errors);
   showSuccess("");
   if (errors.length) return;
@@ -284,6 +699,7 @@ form.addEventListener("submit", async (event) => {
     }
     showSuccess(`Saved patient ${body.patient_id}; server-calculated age: ${body.age}.`);
     $("saved_text").textContent = `Patient ${body.patient_id} was saved successfully. Server-calculated age: ${body.age}.`;
+    renderSavedResult(body);
     $("saved_dialog").showModal();
     saved = true;
     form.querySelectorAll("input, select, button").forEach((control) => { if (control.id !== "save_btn") control.disabled = true; });

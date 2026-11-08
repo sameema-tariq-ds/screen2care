@@ -90,7 +90,8 @@ input:not([type]), input[type="text"], input[type="number"], input[type="date"],
   color: var(--ink); background: var(--surface);
 }
 input:focus, select:focus { border-color: var(--accent); }
-input.invalid { border-color: var(--crit); background: var(--crit-bg); }
+textarea { display: block; width: 100%; margin-top: 0.35rem; padding: 0.5rem 0.65rem; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--ink); font: inherit; resize: vertical; }
+input.invalid, select.invalid, textarea.invalid { border-color: var(--crit); background: var(--crit-bg); }
 .narrow { width: 5.5rem !important; }
 .derived {
   display: block; min-height: 2.3rem; margin-top: 0.35rem; padding: 0.5rem 0.65rem; border: 1px solid var(--line); border-radius: 4px; background: var(--surface);
@@ -209,12 +210,24 @@ table.cbe { width: 100%; border-collapse: collapse; min-width: 38rem; table-layo
 .checks li.info { background: var(--accent-soft); border-color: var(--accent); }
 
 /* Saved dialog */
-dialog { border: 1px solid var(--line); border-radius: 8px; padding: 1.5rem; max-width: 28rem; background: var(--surface); color: var(--ink); }
+dialog { border: 1px solid var(--line); border-radius: 10px; padding: 1.5rem; width: min(42rem, calc(100vw - 2rem)); max-height: calc(100vh - 2rem); overflow: auto; background: var(--surface); color: var(--ink); }
 dialog::backdrop { background: rgba(10, 25, 30, 0.45); }
-dialog h2 { margin: 0 0 0.5rem; font-size: 1.15rem; }
+dialog h2 { margin: 0 0 0.2rem; font-size: 1.25rem; }
 .dialog-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; margin-top: 1.25rem; }
 .secondary { color: var(--accent); text-decoration: none; font-weight: 500; }
 dialog button.secondary { color: var(--accent); }
+#saved_dialog > h2::before { content: "✓"; display: inline-grid; place-items: center; width: 1.8rem; height: 1.8rem; margin-right: .55rem; border-radius: 50%; background: var(--ok); color: var(--surface); font-size: 1rem; vertical-align: -.2rem; }
+.saved-risk { margin-top: 1.1rem; padding-top: .9rem; border-top: 1px solid var(--line); }
+.saved-risk h3 { margin: 0 0 .65rem; font-size: 1.65rem; line-height: 1.2; }
+.risk-alert { margin-bottom: .45rem; color: var(--muted); font-size: .78rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
+.saved-risk h4 { margin: 1.1rem 0 .45rem; font-size: .85rem; color: var(--muted); }
+.saved-risk ul { margin: 0; padding: 0; list-style: none; display: grid; gap: .45rem; }
+.saved-risk li { padding: .65rem .75rem; border: 1px solid var(--line); border-radius: 5px; background: var(--paper); line-height: 1.35; }
+.saved-risk li:has(+ li) { margin-bottom: 0; }
+.saved-risk #doctor_plan li { display: flex; justify-content: space-between; gap: 1rem; }
+.saved-risk #doctor_plan li small { color: var(--muted); white-space: nowrap; }
+.risk-high { color: var(--crit); } .risk-medium { color: var(--warn); }
+.risk-low { color: var(--ok); } .risk-incomplete { color: var(--muted); }
 
 [hidden] { display: none !important; }
 
@@ -240,3 +253,17 @@ dialog button.secondary { color: var(--accent); }
 @media (prefers-reduced-motion: no-preference) {
   html { scroll-behavior: smooth; }
 }
+.form-row { margin-top: 1rem; padding-top: .75rem; border-top: 1px solid rgba(145, 185, 200, .22); }
+.form-row h3 { margin: 0 0 .6rem; font-size: .9rem; color: #a9d7e5; letter-spacing: .02em; }
+.biopsy-add { margin-top: 1rem; }
+.readonly-badge { font-size: .72rem; font-weight: 500; color: #8fc1cf; border: 1px solid var(--line); border-radius: 999px; padding: .2rem .55rem; vertical-align: middle; }
+.history-card { margin-top: 1rem; padding: 1rem; border: 1px solid var(--line); border-radius: 6px; background: #101b1e; }
+.history-card summary { cursor: pointer; color: #d8edf2; font-size: .95rem; font-weight: 600; }
+.history-card[open] summary { margin-bottom: .8rem; }
+.history-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem 1rem; }
+.history-item { display: grid; gap: .2rem; min-width: 0; }
+.history-item strong { color: #9bc8d3; font-size: .76rem; text-transform: capitalize; }
+.history-item span { color: #e3eef0; overflow-wrap: anywhere; font-size: .88rem; }
+.history-nested { margin-top: .35rem; padding: .45rem .6rem; border-left: 2px solid var(--line); display: grid; gap: .35rem; }
+.history-nested .history-item strong { font-size: .72rem; }
+@media (max-width: 700px) { .history-grid { grid-template-columns: 1fr; } }

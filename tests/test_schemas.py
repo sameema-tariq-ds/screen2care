@@ -17,25 +17,22 @@ def base_payload() -> dict:
     return {
         "full_name": "Test Patient",
         "date_of_birth": date(1980, 1, 1),
-        "national_id": "TEST-001",
+        "patient_id": "BC-TE-001",
         "phone": "+923001234567",
         "evaluation_date": TODAY,
         "presentation": False,
         "marital_status": "Unmarried",
-        "race_ethnicity": "Not stated",
         "chest_radiation": "Unknown",
         "high_risk_biopsy": "None",
         "genetic_status": "Never tested",
-        "carrier_relative_status": "Unknown",
         "prior_biopsy_count": 0,
         "prior_biopsy_atypia": "Unknown",
         "personal_breast_cancer": "Unknown",
         "personal_mastectomy": "Unknown",
         "pregnancy_history": "Unknown",
         "breastfeeding_history": "Unknown",
-        "mri_pacemaker": "Unknown",
-        "mri_implants": "Unknown",
-        "mri_kidney_problems": "Unknown",
+        "height_cm": 170,
+        "weight_kg": 65,
         "family_history": [],
         "family_history_none": True,
         "family_history_reviewed": True,
@@ -52,6 +49,14 @@ def base_payload() -> dict:
 def test_no_imaging_yet_is_valid():
     form = IntakeForm(**base_payload())
     assert form.imaging == []
+
+
+@pytest.mark.parametrize("field", ["height_cm", "weight_kg"])
+def test_height_and_weight_are_required(field):
+    payload = base_payload() | {"height_cm": 170, "weight_kg": 65}
+    payload.pop(field)
+    with pytest.raises(ValidationError):
+        IntakeForm(**payload)
 
 
 def test_unmarried_patient_clears_marriage_related_fields():

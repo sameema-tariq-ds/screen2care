@@ -36,5 +36,21 @@ services:
       - .:/app
     restart: unless-stopped
 
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: screening_pgadmin
+    profiles: ["tools"]
+    environment:
+      PGADMIN_DEFAULT_EMAIL: screen2care@hackskill.com
+      PGADMIN_DEFAULT_PASSWORD: screen2care
+    ports:
+      - "5050:80"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
 volumes:
   pgdata:
+  pgadmin_data:

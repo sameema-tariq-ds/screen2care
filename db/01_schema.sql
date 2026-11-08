@@ -65,7 +65,9 @@ CREATE TABLE family_history (
     relation           VARCHAR(30) NOT NULL,         -- Mother, Sister, Maternal Aunt, Unspecified
     relation_degree    SMALLINT CHECK (relation_degree IN (1,2,3)),
     cancer_type        VARCHAR(20) NOT NULL CHECK (cancer_type IN ('Breast','Ovarian','Pancreatic','Prostate','Other')),
-    age_at_diagnosis   SMALLINT
+    age_at_diagnosis   SMALLINT,
+    known_genetic_mutations VARCHAR(8) NOT NULL DEFAULT 'Unknown'
+      CHECK (known_genetic_mutations IN ('BRCA1','BRCA2','Negative','Unknown'))
 );
 
 CREATE TABLE prior_breast_procedure (

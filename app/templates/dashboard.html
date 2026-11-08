@@ -13,7 +13,7 @@
         <h1>Screening-to-Care Loop</h1>
         <p>Patient overview: latest imaging result per patient</p>
       </div>
-      <a class="button" href="/intake">New patient intake</a>
+      <a class="button" href="/intake?lookup=1">New patient intake</a>
     </div>
   </header>
   <main>
@@ -28,7 +28,7 @@
         <tbody>
         {% for p in patients %}
           <tr>
-            <td><a href="/api/patients/{{ p.patient_id }}">{{ p.patient_id }}</a></td>
+            <td>{{ p.patient_id }}</td>
             <td>{{ p.full_name }}</td>
             <td>{{ p.age }}</td>
             <td><span class="badge birads-{{ p.birads_category }}">{{ p.birads_category if p.birads_category is not none else '—' }}</span></td>
