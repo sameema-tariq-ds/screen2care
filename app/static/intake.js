@@ -112,16 +112,15 @@ function prefillPatient(data) {
   form.reset();
   $("family_entries")?.replaceChildren();
   $("imaging_entries")?.replaceChildren();
-  $("biopsy_entries")?.replaceChildren();
+  $("breast_history_entries")?.replaceChildren();
   if ($("evaluation_date")) $("evaluation_date").value = isoToday();
   if ($("signed_date")) $("signed_date").value = isoToday();
   setField("patient_id", patient.patient_id);
   setField("full_name", patient.full_name);
   setField("date_of_birth", patient.date_of_birth);
   setField("phone", patient.phone);
-  const biopsyNotDone = $("biopsy_not_done");
-  if (biopsyNotDone) biopsyNotDone.checked = false;
-  updateBiopsyMode();
+  if ($("medical_history_yes")) $("medical_history_yes").checked = false;
+  updateMedicalHistoryVisibility();
   updateAge();
   updateMaritalFields();
 }
@@ -160,7 +159,7 @@ if (intakeParams.get("lookup") === "1" || intakeParams.get("new") === "1") {
 }
 $("find_patient").addEventListener("click", findExistingPatient);
 $("cancel_lookup").addEventListener("click", () => { setLookupEnabled(false); window.location.href = "/"; });
-const selectIds = ["marital_status", "chest_radiation", "genetic_status", "pregnancy_history", "breastfeeding_history", "geriatric_end_stage_failure", "geriatric_adl_independent"];
+const selectIds = ["marital_status", "chest_radiation", "genetic_status", "breastfeeding_history", "geriatric_end_stage_failure", "geriatric_adl_independent"];
 $("mri_pacemaker")?.closest(".subgroup")?.remove();
 
 function organizePersonalHistory() {
@@ -174,7 +173,7 @@ function organizePersonalHistory() {
   if (!source || personalSection.dataset.organized) return;
   personalSection.dataset.organized = "true";
   const field = (id) => $(id)?.closest(".field");
-  ["race_ethnicity", "carrier_relative_status", "lifetime_risk_tool", "followup_months", "warning_override_reason", "notified_person", "notified_at", "patient_reached", "biopsy_result", "biopsy_date"].forEach((id) => field(id)?.remove());
+  ["race_ethnicity", "carrier_relative_status", "lifetime_risk_tool", "followup_months", "warning_override_reason", "notified_person", "notified_at", "patient_reached"].forEach((id) => field(id)?.remove());
   const personalHistory = [...personalSection.querySelectorAll(":scope > .subgroup")].find((item) => item.querySelector("h3")?.textContent.includes("Personal breast history"));
   const personalFields = personalHistory ? [...personalHistory.querySelectorAll(".field")].filter((field) => !["personal_breast_cancer", "personal_mastectomy"].includes(field.querySelector("select")?.id)) : [];
   const row = (title, nodes) => {
@@ -182,31 +181,24 @@ function organizePersonalHistory() {
     const heading = document.createElement("h3"); heading.textContent = title;
     const grid = document.createElement("div"); grid.className = "grid";
     nodes.filter(Boolean).forEach((node) => grid.appendChild(node));
-    block.append(heading, grid); return block;
+    if (title) block.append(heading);
+    block.append(grid); return block;
   };
-  const bodyRow = row("Body measurements", [field("weight_kg"), field("height_cm"), field("bmi_out")?.closest(".field")]);
-  const obstetricRow = row("Marital and reproductive history", [field("marital_status"), field("menarche_age"), field("menopausal_status"), field("menopause_age"), $("married_fields"), field("ocp_use"), field("hrt_use"), field("hrt_duration_years"), ...personalFields]);
+  const bodyRow = row("Body measurements", [field("height_cm"), field("weight_kg"), field("bmi_out")?.closest(".field")]);
+  const breastfeedingDuration = document.createElement("label"); breastfeedingDuration.className = "field"; breastfeedingDuration.innerHTML = 'Breastfeeding duration (years)<input id="breastfeeding_duration_years" type="number" min="0" max="30" step="0.5">';
+  const breastfeedingField = field("breastfeeding_history");
+  const obstetricRow = row("", [field("marital_status"), field("menarche_age"), field("menopausal_status"), field("menopause_age"), $("married_fields"), field("ocp_use"), field("hrt_use"), field("hrt_duration_years"), breastfeedingField, breastfeedingDuration]);
   const radiationRow = row("Chest radiation history", [field("chest_radiation"), field("chest_radiation_age"), field("chest_radiation_years")]);
   const geneticRow = row("Genetic history", [field("genetic_status"), field("genetic_gene")]);
   const geriatricRow = row("Geriatric Assessment (Only if Patient Age >= 75)", [field("geriatric_end_stage_failure"), field("geriatric_adl_independent")]);
-  const priorHistory = document.createElement("label"); priorHistory.className = "field grid-span-full";
-  priorHistory.innerHTML = 'Prior breast history <span class="req">*</span><select id="prior_breast_history" required><option value="">Select...</option><option>None</option><option>Biopsy</option><option>Lumpectomy</option><option>Cyst Aspiration</option><option>Implants</option></select>';
-  const priorDetails = document.createElement("label"); priorDetails.className = "field grid-span-full";
-  priorDetails.innerHTML = 'Details/Pathology findings<textarea id="prior_breast_details" rows="2"></textarea>';
-  const updatePriorDetails = () => {
-    const selected = value("prior_breast_history");
-    const visible = selected && selected !== "None";
-    priorDetails.hidden = !visible;
-    const details = $("prior_breast_details");
-    if (!visible && details) details.value = "";
-  };
-  priorHistory.querySelector("select").addEventListener("change", updatePriorDetails);
-  updatePriorDetails();
-  const priorRow = row("Prior Breast History", [priorHistory, priorDetails]);
-  const biopsyHint = document.createElement("p"); biopsyHint.className = "hint"; biopsyHint.textContent = "Add each previous biopsy separately.";
-  const biopsyNotDone = document.createElement("label"); biopsyNotDone.className = "choice-row"; biopsyNotDone.innerHTML = '<input type="checkbox" id="biopsy_not_done"> No previous biopsy';
-  const biopsyEntries = document.createElement("div"); biopsyEntries.id = "biopsy_entries";
-  const addBiopsy = document.createElement("button"); addBiopsy.type = "button"; addBiopsy.className = "secondary biopsy-add"; addBiopsy.id = "add_biopsy"; addBiopsy.textContent = "Add biopsy entry";
+  geriatricRow.id = "geriatric_assessment";
+  const breastHistoryEntries = document.createElement("div"); breastHistoryEntries.id = "breast_history_entries";
+  const addBreastEntry = document.createElement("button"); addBreastEntry.type = "button"; addBreastEntry.className = "secondary"; addBreastEntry.id = "add_breast_entry"; addBreastEntry.textContent = "Add breast entry";
+  const breastHistoryRow = document.createElement("div"); breastHistoryRow.className = "subgroup personal-organized breast-history-group";
+  breastHistoryRow.innerHTML = "<h3>Breast History</h3>";
+  breastHistoryRow.append(breastHistoryEntries, addBreastEntry);
+  const medicalHistory = document.createElement("div"); medicalHistory.className = "subgroup personal-organized";
+  medicalHistory.innerHTML = '<h3>Medical History</h3><label class="choice-row"><input type="checkbox" id="medical_history_yes"> Yes</label><label class="field" id="medical_history_details_field" hidden>Medical history details<textarea id="medical_history_details" rows="3"></textarea></label>';
   personalHistory?.remove(); source.remove();
 
   const rename = (id, number, title) => { const block = $(id); block.querySelector("h2").innerHTML = `<span class="num">${number}</span>${title}`; return block; };
@@ -215,14 +207,13 @@ function organizePersonalHistory() {
   const symptoms = $("s1").querySelectorAll(":scope > .grid")[1];
   const complaint = document.createElement("section"); complaint.className = "block"; complaint.id = "s2"; complaint.innerHTML = '<h2><span class="num">2</span>Chief Complaint &amp; Presenting Symptoms</h2>';
   if (presentation) complaint.appendChild(presentation); if (symptoms) complaint.appendChild(symptoms); $("s1").after(complaint);
-  personalSection.id = "s4"; rename("s4", 4, "Personal Medical History"); personalSection.append(priorRow, bodyRow, radiationRow, geneticRow, geriatricRow);
+  personalSection.id = "s4"; rename("s4", 4, "Personal Medical History"); personalSection.append(breastHistoryRow, medicalHistory, bodyRow, radiationRow, geneticRow, geriatricRow);
   const obstetric = document.createElement("section"); obstetric.className = "block"; obstetric.id = "s3"; obstetric.innerHTML = '<h2><span class="num">3</span>Obstetric &amp; Gynecological History</h2>'; obstetric.appendChild(obstetricRow); personalSection.before(obstetric);
   familySection.id = "s5"; rename("s5", 5, "Family History of Cancer");
   cbeSection.id = "s6"; rename("s6", 6, "Clinical Breast Examination (CBE)");
   imagingSection.id = "s7"; rename("s7", 7, "Imaging Assessment");
-  const biopsy = document.createElement("section"); biopsy.className = "block"; biopsy.id = "s8"; biopsy.innerHTML = '<h2><span class="num">8</span>Biopsy Assessment</h2>'; biopsy.append(biopsyHint, biopsyNotDone, biopsyEntries, addBiopsy); imagingSection.after(biopsy);
-  planSection.id = "s9"; rename("s9", 9, "Clinical Plan &amp; Disposition");
-  const nav = document.querySelector(".toc"); if (nav) { nav.replaceChildren(); [["s1", "1 Patient Demographics & Baseline Data"], ["s2", "2 Chief Complaint & Presenting Symptoms"], ["s3", "3 Obstetric & Gynecological History"], ["s4", "4 Personal Medical History"], ["s5", "5 Family History of Cancer"], ["s6", "6 Clinical Breast Examination (CBE)"], ["s7", "7 Imaging Assessment"], ["s8", "8 Biopsy Assessment"], ["s9", "9 Clinical Plan & Disposition"]].forEach(([href, label]) => { const link = document.createElement("a"); link.href = `#${href}`; link.textContent = label; nav.appendChild(link); }); }
+  planSection.id = "s8"; rename("s8", 8, "Clinical Plan &amp; Disposition");
+  const nav = document.querySelector(".toc"); if (nav) { nav.replaceChildren(); [["s1", "1 Patient Demographics & Baseline Data"], ["s2", "2 Chief Complaint & Presenting Symptoms"], ["s3", "3 Obstetric & Gynecological History"], ["s4", "4 Personal Medical History"], ["s5", "5 Family History of Cancer"], ["s6", "6 Clinical Breast Examination (CBE)"], ["s7", "7 Imaging Assessment"], ["s8", "8 Clinical Plan & Disposition"]].forEach(([href, label]) => { const link = document.createElement("a"); link.href = `#${href}`; link.textContent = label; nav.appendChild(link); }); }
 }
 
 organizePersonalHistory();
@@ -282,6 +273,8 @@ function updateAge() {
 
 function updateGeriatricVisibility() {
   const visible = age() !== null && age() >= 75;
+  const block = $("geriatric_assessment");
+  if (block) block.hidden = !visible;
   ["geriatric_end_stage_failure", "geriatric_adl_independent"].forEach((id) => {
     const input = $(id); if (!input) return;
     input.closest(".field").hidden = !visible;
@@ -313,15 +306,18 @@ function updateMenopauseVisibility() {
 }
 
 function updateHrtVisibility() {
-  const current = age();
-  const visible = current !== null && current >= 45 && current <= 55;
-  ["hrt_use", "hrt_duration_years"].forEach((id) => {
-    const input = $(id);
-    if (!input) return;
-    const field = input.closest(".field");
-    if (field) field.hidden = !visible;
-    if (!visible) input.value = "";
-  });
+  const hrt = $("hrt_use"), duration = $("hrt_duration_years");
+  const visible = age() !== null && age() >= 45 && age() <= 55;
+  if (hrt?.closest(".field")) hrt.closest(".field").hidden = !visible;
+  if (duration?.closest(".field")) duration.closest(".field").hidden = !visible || value("hrt_use") !== "Yes";
+  if (!visible && hrt) hrt.value = "";
+  if ((!visible || value("hrt_use") !== "Yes") && duration) duration.value = "";
+}
+
+function updateBreastfeedingVisibility() {
+  const duration = $("breastfeeding_duration_years");
+  if (duration?.closest(".field")) duration.closest(".field").hidden = value("breastfeeding_history") !== "Yes";
+  if (value("breastfeeding_history") !== "Yes" && duration) duration.value = "";
 }
 
 function updateRadiationFields() {
@@ -341,13 +337,10 @@ function updatePresentationFields() {
     const field = $(id);
     if (field) field.closest(".field").hidden = !symptomatic;
   });
-  const skin = document.querySelector('input[name="skin_changes"]');
-  if (skin) skin.closest(".field").hidden = !symptomatic;
   const dischargeColour = $("nipple_discharge_color")?.closest(".field");
   if (dischargeColour) dischargeColour.hidden = !symptomatic || !value("nipple_discharge_side");
   if (!symptomatic) {
     ["lump_side", "lump_duration", "nipple_discharge_side", "nipple_discharge_color", "pain_type", "pain_severity"].forEach((id) => { if ($(id)) $(id).value = ""; });
-    document.querySelectorAll('input[name="skin_changes"]').forEach((input) => { input.checked = false; });
   }
 }
 
@@ -363,6 +356,7 @@ $("hrt_use")?.addEventListener("change", () => {
   if (value("hrt_use") !== "Yes" && $("hrt_duration_years")) $("hrt_duration_years").value = "";
   updateHrtVisibility();
 });
+$("breastfeeding_history")?.addEventListener("change", updateBreastfeedingVisibility);
 $("menopausal_status")?.addEventListener("change", updateMenopauseVisibility);
 
 function updateMaritalFields() {
@@ -370,17 +364,17 @@ function updateMaritalFields() {
   const marriedFields = $("married_fields");
   if (marriedFields) marriedFields.hidden = !married;
   const pregnancy = $("pregnancy_history"), breastfeeding = $("breastfeeding_history");
-  if (pregnancy?.closest("label")) pregnancy.closest("label").hidden = !married;
+  if (pregnancy?.closest("label")) pregnancy.closest("label").remove();
   if (breastfeeding?.closest("label")) breastfeeding.closest("label").hidden = !married;
-  if (!pregnancy || !breastfeeding) return;
-  pregnancy.required = married;
+  if (!breastfeeding) return;
   breastfeeding.required = married;
   if (!married) {
     $("parity").value = "";
     $("age_first_birth").value = "";
-    pregnancy.value = "Unknown";
     breastfeeding.value = "Unknown";
+    if ($("breastfeeding_duration_years")) $("breastfeeding_duration_years").value = "";
   }
+  updateBreastfeedingVisibility();
 }
 
 $("marital_status").addEventListener("change", updateMaritalFields);
@@ -417,8 +411,8 @@ function addFamily() {
   const row = document.createElement("div");
   row.className = "grid repeat-row family-row";
   row.innerHTML = `<input type="hidden" data-field="family_side" value="Unknown side">
-    <label class="field">Relation<input data-field="relation" required placeholder="e.g. Mother, sister, aunt"></label>
     <label class="field">Blood relative<select data-field="relation_degree" required><option value="">Select...</option><option value="1">First</option><option value="2">Second</option></select></label>
+    <label class="field">Relation<input data-field="relation" required placeholder="e.g. Mother, sister, aunt"></label>
     <label class="field">Age at diagnosis<input data-field="age_at_diagnosis" type="number" min="1" max="120" required></label>
     <label class="field">Cancer type<select data-field="cancer_type" required><option value="">Select...</option><option>Breast</option><option>Ovarian</option></select></label>
     <label class="field">Known Genetic Mutations<select data-field="known_genetic_mutations" required><option value="">Select...</option><option>BRCA1</option><option>BRCA2</option><option>Negative</option><option>Unknown</option></select></label>
@@ -447,31 +441,34 @@ function addImaging() {
   $("imaging_entries").appendChild(row);
 }
 
-function addBiopsy() {
+function addBreastEntry() {
   const row = document.createElement("div");
-  row.className = "grid repeat-row biopsy-row";
-  row.innerHTML = `<label class="field">Biopsy date<input data-field="date" type="date" required></label>
-    <label class="field">Result<select data-field="result" required><option value="">Select...</option><option>Benign</option><option>ADH/LCIS</option><option>Cancer</option><option>Unknown</option></select></label>
-    <label class="field">Details<input data-field="details" placeholder="Optional details"></label>
+  row.className = "grid repeat-row breast-history-row";
+  row.innerHTML = `<label class="field">Breast history<select data-field="type" required><option value="">Select...</option><option>None</option><option>Biopsy</option><option>Lumpectomy</option><option>Cyst Aspiration</option><option>Implants</option></select></label>
+    <label class="field breast-entry-details">Details/Pathology findings<textarea data-field="details" rows="2"></textarea></label>
     <button type="button" class="secondary remove">Remove</button>`;
+  const type = row.querySelector('[data-field="type"]');
+  const details = row.querySelector('[data-field="details"]');
+  const updateDetails = () => { const hasDetails = type.value && type.value !== "None"; row.querySelector(".breast-entry-details").hidden = !hasDetails; if (!hasDetails) details.value = ""; };
+  type.addEventListener("change", updateDetails); updateDetails();
   row.querySelector(".remove").onclick = () => row.remove();
-  $("biopsy_entries").appendChild(row);
+  $("breast_history_entries").appendChild(row);
 }
 
-function updateBiopsyMode() {
-  const checkbox = $("biopsy_not_done");
-  const entries = $("biopsy_entries");
-  const addButton = $("add_biopsy");
-  if (!checkbox || !entries || !addButton) return;
-  const disabled = checkbox.checked;
-  entries.hidden = disabled;
-  addButton.hidden = disabled;
-  if (disabled) entries.replaceChildren();
-}
+$("add_breast_entry").addEventListener("click", addBreastEntry);
 
-$("add_biopsy").addEventListener("click", addBiopsy);
-$("biopsy_not_done").addEventListener("change", updateBiopsyMode);
-updateBiopsyMode();
+function updateMedicalHistoryVisibility() {
+  const yes = $("medical_history_yes")?.checked;
+  const field = $("medical_history_details_field");
+  const details = $("medical_history_details");
+  if (field) field.hidden = !yes;
+  if (details) {
+    details.required = Boolean(yes);
+    if (!yes) details.value = "";
+  }
+}
+$("medical_history_yes")?.addEventListener("change", updateMedicalHistoryVisibility);
+updateMedicalHistoryVisibility();
 
 $("add_family").onclick = addFamily;
 $("add_imaging").onclick = addImaging;
@@ -523,14 +520,14 @@ function payload() {
     full_name: value("full_name"), date_of_birth: value("date_of_birth"), patient_id: value("patient_id"), phone: value("phone"),
     evaluation_date: value("evaluation_date"), presentation: radio("presentation") === null ? null : radio("presentation") === "true",
     lump_side: value("lump_side"), lump_duration: value("lump_duration"), nipple_discharge_side: value("nipple_discharge_side"),
-    nipple_discharge_color: value("nipple_discharge_color"), skin_changes: [...document.querySelectorAll('input[name="skin_changes"]:checked')].map(input => input.value), pain_type: value("pain_type"), pain_severity: number("pain_severity"),
+    nipple_discharge_color: value("nipple_discharge_color"), pain_type: value("pain_type"), pain_severity: number("pain_severity"),
     marital_status: value("marital_status"), menarche_age: number("menarche_age"), menopausal_status: value("menopausal_status"), menopause_age: number("menopause_age"),
     parity: value("marital_status") === "Married" ? number("parity") : null, age_first_birth: value("marital_status") === "Married" ? number("age_first_birth") : null, ocp_use: value("ocp_use"), hrt_use: value("hrt_use"), hrt_duration_years: number("hrt_duration_years"),
     chest_radiation: value("chest_radiation"), chest_radiation_age: number("chest_radiation_age"), chest_radiation_years: number("chest_radiation_years"),
     genetic_status: geneticStatus, genetic_gene: value("genetic_gene"), genetic_gene_other: value("genetic_gene_other"),
-    personal_breast_cancer: "Unknown", personal_mastectomy: "Unknown", pregnancy_history: value("marital_status") === "Married" ? tri("pregnancy_history") : "Unknown", breastfeeding_history: value("marital_status") === "Married" ? tri("breastfeeding_history") : "Unknown",
+    personal_breast_cancer: "Unknown", personal_mastectomy: "Unknown", pregnancy_history: "Unknown", breastfeeding_history: value("marital_status") === "Married" ? tri("breastfeeding_history") : "Unknown", breastfeeding_duration_years: value("marital_status") === "Married" ? number("breastfeeding_duration_years") : null,
     height_cm: number("height_cm"), weight_kg: number("weight_kg"),
-    prior_breast_history: value("prior_breast_history"), prior_breast_details: value("prior_breast_details"), biopsy_history: repeated("biopsy_entries", ["date", "result", "details"]), biopsy_not_done: $("biopsy_not_done").checked, family_history: repeated("family_entries", ["family_side", "relation", "relation_degree", "cancer_type", "age_at_diagnosis", "known_genetic_mutations"]), family_history_none: $("family_history_none").checked, family_history_reviewed: false,
+    breast_history: repeated("breast_history_entries", ["type", "details"]), medical_history_present: $("medical_history_yes").checked, medical_history_details: value("medical_history_details"), family_history: repeated("family_entries", ["family_side", "relation", "relation_degree", "cancer_type", "age_at_diagnosis", "known_genetic_mutations"]), family_history_none: $("family_history_none").checked, family_history_reviewed: false,
     cbe_right: exam("r"), cbe_left: exam("l"), imaging: repeated("imaging_entries", ["date", "modality", "density", "birads"]), imaging_not_done: $("imaging_not_done").checked,
     plan: [...document.querySelectorAll("#plan_options input:checked")].map(input => input.value), clinician_notes: value("clinician_notes"), examiner_name: value("examiner_name"), signed_date: value("signed_date"),
   };
@@ -627,7 +624,6 @@ function renderReview() {
   const review = $("review_content");
   if (!review) return;
   review.replaceChildren();
-  const skinChanges = p.skin_changes.length ? p.skin_changes.join(", ") : "None";
   const nippleDischarge = [p.nipple_discharge_side, p.nipple_discharge_color].filter(Boolean).join(" · ") || "None";
   const items = [
     ["Patient", p.full_name || "Not entered"],
@@ -635,7 +631,6 @@ function renderReview() {
     ["Presentation", p.presentation === null ? "Not selected" : (p.presentation ? "Symptomatic" : "Asymptomatic")],
     ["Lump", p.lump_side || "None"],
     ["Nipple discharge", nippleDischarge],
-    ["Skin changes", skinChanges],
     ["Pain", p.pain_type || "None"],
     ["Imaging", p.imaging_not_done ? "Not done yet" : `${p.imaging.length} entr${p.imaging.length === 1 ? "y" : "ies"}`],
     ["Plan", p.plan.length ? p.plan.join(", ") : "Not selected"],

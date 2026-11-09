@@ -35,7 +35,6 @@
     <label class="field">Lump duration<input id="lump_duration"></label>
     <label class="field">Nipple discharge side<select id="nipple_discharge_side"><option value="">None</option><option>Right</option><option>Left</option><option>Both</option></select></label>
     <label class="field">Discharge colour<select id="nipple_discharge_color"><option value="">None</option><option>Bloody</option><option>Clear</option><option>Milky</option></select></label>
-    <div class="field">Skin changes<div class="choice-row"><label><input type="checkbox" name="skin_changes" value="Dimpling"> Dimpling</label><label><input type="checkbox" name="skin_changes" value="Retraction"> Retraction</label><label><input type="checkbox" name="skin_changes" value="Scaling / Rash"> Scaling / rash</label></div></div>
     <label class="field">Pain type<select id="pain_type"><option value="">None</option><option>Cyclical</option><option>Non-cyclical</option></select></label>
     <label class="field">Pain severity (1–10)<input id="pain_severity" type="number" min="1" max="10"></label>
   </div></section>
@@ -77,4 +76,4 @@
   <div class="actions"><div id="form_error" class="form-error" role="alert" hidden></div><div id="form_success" class="form-success" role="status" hidden></div><button type="submit" id="save_btn">Save intake</button></div>
 </form></main>
 <dialog id="saved_dialog"><h2>Intake saved</h2><p id="saved_text"></p><section class="saved-risk"><h4>Risk-factor</h4><ul><li id="risk_label"></li></ul><h4>Alert Trigger</h4><ul><li id="risk_alert"></li></ul><h4>Reason</h4><ul id="risk_reasons"></ul><h4>Doctor's plan</h4><ul id="doctor_plan"></ul></section><div class="dialog-actions"><button type="button" class="secondary" id="close_saved">Close</button></div></dialog>
-<script src="{{ url_for('static', path='intake.js') }}?v=58"></script></body></html>
+<script src="{{ url_for('static', path='intake.js') }}?v=62"></script></body></html>

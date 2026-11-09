@@ -35,3 +35,7 @@ def ensure_runtime_schema() -> None:
             ADD CONSTRAINT family_history_known_genetic_mutations_check
             CHECK (known_genetic_mutations IN ('BRCA1','BRCA2','Negative','Unknown'))
         """))
+        conn.execute(text("""
+            ALTER TABLE patient_risk_profile
+            ADD COLUMN IF NOT EXISTS breastfeeding_duration_years NUMERIC(4,1)
+        """))

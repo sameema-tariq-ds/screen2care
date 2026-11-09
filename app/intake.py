@@ -138,13 +138,13 @@ def save_intake(form: IntakeForm) -> dict:
                chest_radiation_years, high_risk_biopsy,
                prior_biopsy_count, prior_biopsy_atypia,
                personal_breast_cancer, personal_breast_cancer_status, personal_mastectomy, personal_mastectomy_status,
-               pregnancy_history, pregnancy_history_status, breastfeeding_history, breastfeeding_history_status,
+               pregnancy_history, pregnancy_history_status, breastfeeding_history, breastfeeding_history_status, breastfeeding_duration_years,
                risk_data_status)
             VALUES (:pid,:menarche,:menopause,:menopause_age,:parity,:first_birth,:ocp,:hrt,:hrt_years,
                     :height,:weight,:genetic,:gene,:radiation,:radiation_age,:radiation_years,:lesion,
                     :biopsy_count,:biopsy_atypia,:personal_cancer,
                     :personal_cancer_status,:mastectomy,:mastectomy_status,:pregnancy,:pregnancy_status,
-                    :breastfeeding,:breastfeeding_status,:data_status)
+                    :breastfeeding,:breastfeeding_status,:breastfeeding_duration_years,:data_status)
             ON CONFLICT (patient_id) DO UPDATE SET
               menarche_age=EXCLUDED.menarche_age,
               menopausal_status=EXCLUDED.menopausal_status, menopause_age=EXCLUDED.menopause_age,
@@ -160,6 +160,7 @@ def save_intake(form: IntakeForm) -> dict:
               personal_mastectomy=EXCLUDED.personal_mastectomy, personal_mastectomy_status=EXCLUDED.personal_mastectomy_status,
               pregnancy_history=EXCLUDED.pregnancy_history, pregnancy_history_status=EXCLUDED.pregnancy_history_status,
               breastfeeding_history=EXCLUDED.breastfeeding_history, breastfeeding_history_status=EXCLUDED.breastfeeding_history_status,
+              breastfeeding_duration_years=EXCLUDED.breastfeeding_duration_years,
               risk_data_status=EXCLUDED.risk_data_status, updated_at=now()
         """), {
             "pid": patient_id, "menarche": form.menarche_age,
@@ -175,6 +176,7 @@ def save_intake(form: IntakeForm) -> dict:
             "mastectomy_status": _value(form.personal_mastectomy), "pregnancy": _tri_bool(form.pregnancy_history),
             "pregnancy_status": _value(form.pregnancy_history), "breastfeeding": _tri_bool(form.breastfeeding_history),
             "breastfeeding_status": _value(form.breastfeeding_history),
+            "breastfeeding_duration_years": form.breastfeeding_duration_years,
             "data_status": "Pending",
         })
 
@@ -188,11 +190,19 @@ def save_intake(form: IntakeForm) -> dict:
                    "cancer": _value(relative.cancer_type), "age": relative.age_at_diagnosis,
                    "mutations": _value(relative.known_genetic_mutations)})
 
-        for biopsy in form.biopsy_history:
+        procedure_types = {
+            "Biopsy": "Biopsy",
+            "Lumpectomy": "Lumpectomy",
+            "Cyst Aspiration": "CystAspiration",
+            "Implants": "Implants",
+        }
+        for entry in form.breast_history:
+            if entry.type == "None":
+                continue
             conn.execute(text("""
-                INSERT INTO prior_breast_procedure (patient_id, procedure_type, procedure_date, result_summary)
-                VALUES (:pid,'Biopsy',:date,:details)
-            """), {"pid": patient_id, "date": biopsy.date, "details": biopsy.result if not biopsy.details else f"{biopsy.result}: {biopsy.details}"})
+                INSERT INTO prior_breast_procedure (patient_id, procedure_type, result_summary)
+                VALUES (:pid, :procedure_type, :details)
+            """), {"pid": patient_id, "procedure_type": procedure_types[entry.type], "details": entry.details})
 
         disposition = _disposition(form)
         encounter_id = conn.execute(text("""
@@ -215,8 +225,8 @@ def save_intake(form: IntakeForm) -> dict:
                "followup": form.followup_months, "plan": [_value(item) for item in form.plan], "override": form.warning_override_reason,
                "examiner": form.examiner_name, "signed": form.signed_date, "notified": form.notified_person,
                "notified_at": form.notified_at, "reached": form.patient_reached,
-               "biopsy_result": form.biopsy_follow_up.result if form.biopsy_follow_up else None,
-               "biopsy_date": form.biopsy_follow_up.date if form.biopsy_follow_up else None,
+               "biopsy_result": None,
+               "biopsy_date": None,
                }).scalar()
 
         conn.execute(text("""

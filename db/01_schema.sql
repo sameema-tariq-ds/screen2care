@@ -41,6 +41,7 @@ CREATE TABLE patient_risk_profile (
     ocp_use                 VARCHAR(10) CHECK (ocp_use IN ('Never','Past','Current')),
     hrt_use                 BOOLEAN,
     hrt_duration_years      NUMERIC(4,1),
+    breastfeeding_duration_years NUMERIC(4,1),
     height_cm               NUMERIC(5,1),
     weight_kg               NUMERIC(5,1),
     bmi                     NUMERIC(4,1) GENERATED ALWAYS AS

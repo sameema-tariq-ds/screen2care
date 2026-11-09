@@ -150,14 +150,9 @@ class ImagingEntry(BaseModel):
         return self
 
 
-class BiopsyFollowUp(BaseModel):
-    result: str = Field(pattern=r"^(Benign|ADH/LCIS|Cancer)$")
-    date: date
-
-
-class BiopsyEntry(BaseModel):
-    date: date
-    result: str = Field(pattern=r"^(Benign|ADH/LCIS|Cancer|Unknown)$")
+class BreastHistoryEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    type: str = Field(pattern=r"^(None|Biopsy|Lumpectomy|Cyst Aspiration|Implants)$")
     details: Optional[str] = Field(None, max_length=200)
 
 
@@ -204,14 +199,12 @@ class IntakeForm(BaseModel):
     personal_mastectomy: YesNoUnknown
     pregnancy_history: YesNoUnknown
     breastfeeding_history: YesNoUnknown
+    breastfeeding_duration_years: Optional[float] = Field(None, ge=0, le=30)
+    breast_history: list[BreastHistoryEntry] = Field(default_factory=list, max_length=20)
+    medical_history_present: bool = False
+    medical_history_details: Optional[str] = Field(None, max_length=2000)
     height_cm: float = Field(..., ge=100, le=230)
     weight_kg: float = Field(..., ge=25, le=300)
-    # The browser marks this select required and submits an explicit value.
-    # Keep the default for compatibility with older API snapshots.
-    prior_breast_history: str = Field("None", pattern=r"^(None|Biopsy|Lumpectomy|Cyst Aspiration|Implants)$")
-    prior_breast_details: Optional[str] = Field(None, max_length=200)
-    biopsy_history: list[BiopsyEntry] = Field(default_factory=list, max_length=20)
-    biopsy_not_done: bool = False
     family_history: list[Relative] = []
     family_history_none: bool
     family_history_reviewed: bool = False
@@ -230,7 +223,6 @@ class IntakeForm(BaseModel):
     notified_person: Optional[str] = Field(None, max_length=150)
     notified_at: Optional[date] = None
     patient_reached: Optional[bool] = None
-    biopsy_follow_up: Optional[BiopsyFollowUp] = None
 
     @property
     def age(self) -> int:
@@ -263,8 +255,6 @@ class IntakeForm(BaseModel):
 
     @model_validator(mode="after")
     def check_rules(self):
-        if self.prior_breast_history == "None":
-            self.prior_breast_details = None
         if self.date_of_birth >= self.evaluation_date:
             raise ValueError("Date of birth must be before evaluation date.")
         if self.presentation is None:
@@ -287,16 +277,26 @@ class IntakeForm(BaseModel):
             raise ValueError("Chest-radiation age cannot be greater than the patient's current age.")
         elif self.chest_radiation_years is not None and self.chest_radiation_years > self.age:
             raise ValueError("Chest-radiation duration cannot exceed the patient's current age.")
-        if self.hrt_use != YesNoUnknown.YES:
+        if not 45 <= self.age <= 55:
+            self.hrt_use = None
             self.hrt_duration_years = None
+        elif self.hrt_use != YesNoUnknown.YES:
+            self.hrt_duration_years = None
+        if not self.medical_history_present:
+            self.medical_history_details = None
+        elif not self.medical_history_details:
+            raise ValueError("Enter medical history details when Medical History is marked Yes.")
+        for entry in self.breast_history:
+            if entry.type == "None":
+                entry.details = None
+        if self.breastfeeding_history != YesNoUnknown.YES:
+            self.breastfeeding_duration_years = None
         if self.genetic_status != GeneticStatus.POSITIVE:
             self.genetic_gene = self.genetic_gene_other = None
         if self.age < 75:
             self.geriatric_end_stage_failure = self.geriatric_adl_independent = None
         if self.imaging_not_done and self.imaging:
             self.imaging = []
-        if self.biopsy_not_done:
-            self.biopsy_history = []
         if not self.imaging_not_done and not self.imaging:
             raise ValueError("Record imaging or select 'imaging not done'.")
         for scan in self.imaging:

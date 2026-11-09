@@ -60,9 +60,10 @@ def calculate_risk(snapshot: dict[str, Any]) -> RiskAssessment:
 
     if data.get("high_risk_biopsy") in HIGH_BIOPSIES:
         reasons.append(f"high_risk_biopsy = {data['high_risk_biopsy']}.")
-    for biopsy in data.get("biopsy_history", []):
-        if biopsy.get("result") in HIGH_BIOPSIES:
-            reasons.append(f"biopsy_history.result = {biopsy['result']}.")
+    for entry in data.get("breast_history", []):
+        details = str(entry.get("details") or "")
+        if entry.get("type") == "Biopsy" and any(marker in details.upper() for marker in HIGH_BIOPSIES):
+            reasons.append(f"breast_history.biopsy = {details}.")
             break
 
     for relative in data.get("family_history", []):
