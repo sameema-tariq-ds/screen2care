@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Screening-to-Care Loop</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+</head>
+<body>
+  <header>
+    <div class="header-row">
+      <div>
+        <h1>Screening-to-Care Loop</h1>
+        <p>Patient overview: latest imaging result per patient</p>
+      </div>
+      <a class="button" href="/intake?lookup=1">New patient intake</a>
+    </div>
+  </header>
+  <main>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Patient ID</th><th>Name</th><th>Age</th><th>BI-RADS</th>
+            <th>Density</th><th>Result date</th><th>Data flags</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for p in patients %}
+          <tr>
+            <td>{{ p.patient_id }}</td>
+            <td>{{ p.full_name }}</td>
+            <td>{{ p.age }}</td>
+            <td><span class="badge birads-{{ p.birads_category }}">{{ p.birads_category if p.birads_category is not none else '—' }}</span></td>
+            <td>{{ p.density or '—' }}</td>
+            <td>{{ p.result_released_at.strftime('%d %b %Y') if p.result_released_at else '—' }}</td>
+            <td>{% if p.flag_count %}<span class="flag">{{ p.flag_count }}</span>{% else %}—{% endif %}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </main>
+</body>
+</html>

@@ -1,0 +1,56 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16        # PostgreSQL 16 with pgvector included
+    container_name: screening_db
+    environment:
+      POSTGRES_USER: loop
+      POSTGRES_PASSWORD: loop_dev_password
+      POSTGRES_DB: screening_care_loop
+      TZ: UTC
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db:/docker-entrypoint-initdb.d   # runs 01_schema.sql then 02_seed.sql on FIRST start only
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U loop -d screening_care_loop"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: screen2care_app
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://loop:loop_dev_password@db:5432/screening_care_loop
+      PORT: 8000
+      DEV_RELOAD: 1
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    restart: unless-stopped
+
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: screening_pgadmin
+    profiles: ["tools"]
+    environment:
+      PGADMIN_DEFAULT_EMAIL: screen2care@hackskill.com
+      PGADMIN_DEFAULT_PASSWORD: screen2care
+    ports:
+      - "5050:80"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
+volumes:
+  pgdata:
+  pgadmin_data:

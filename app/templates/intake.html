@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>New patient intake – Breast screening</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', path='intake.css') }}?v=10">
+</head>
+<body>
+<header class="topbar"><a href="/" class="back">Patient overview</a><div><h1>Breast screening clinical proforma</h1><p>New patient intake · complete the sections in order</p></div></header>
+<main class="layout"><form id="intake" autocomplete="off" novalidate>
+  <dialog id="patient_lookup"><div class="lookup-card"><h2>Find patient record</h2><p>Enter an existing Patient ID to load its saved intake details.</p><label class="field">Patient ID<input id="lookup_patient_id" pattern="BC-[A-Z]{2}-[0-9]{3}" placeholder="BC-HP-001" required></label><div id="lookup_message" class="form-error" role="alert" hidden></div><div class="dialog-actions"><button type="button" class="secondary" id="cancel_lookup">Cancel</button><button type="button" id="find_patient">Find patient</button></div></div></dialog>
+  <div class="form-intro"><strong>Before you begin</strong><p>Fields marked <span class="req">*</span> are required. Use “Not answered” when an examination item was not assessed; it will not be treated as normal.</p></div>
+  <section id="previous_intakes" class="block history-block" hidden>
+    <h2>Previous intake forms <span class="readonly-badge">Read-only</span></h2>
+    <p class="hint">Earlier encounters are preserved and cannot be edited. The form below is the current editable intake.</p>
+    <div id="previous_intake_cards"></div>
+  </section>
+
+  <section class="block" id="s1"><h2><span class="num">1</span>Patient Demographics &amp; Baseline Data</h2><div class="grid">
+    <label class="field">Full name <span class="req">*</span><input id="full_name" required></label>
+    <label class="field">Date of birth <span class="req">*</span><input id="date_of_birth" type="date" required></label>
+    <div class="field">Calculated age<output id="age_out_top" class="derived">--</output></div>
+    <label class="field">Patient ID <span class="req">*</span><input id="patient_id" pattern="BC-[A-Z]{2}-[0-9]{3}" placeholder="BC-HP-001" required></label>
+    <label class="field">Phone number <span class="req">*</span><input id="phone" type="tel" required></label>
+    <label class="field">Evaluation date <span class="req">*</span><input id="evaluation_date" type="date" required></label>
+    <div class="field">Calculated age<output id="age_out" class="derived">—</output></div>
+  </div><fieldset><legend>Presentation <span class="req">required</span></legend><div class="choice-row">
+    <label><input type="radio" name="presentation" value="false" required> Asymptomatic</label><label><input type="radio" name="presentation" value="true"> Symptomatic</label>
+  </div></fieldset>
+  <div class="grid">
+    <label class="field">Lump side<select id="lump_side"><option value="">None</option><option>Right</option><option>Left</option><option>Both</option></select></label>
+    <label class="field">Lump duration<input id="lump_duration"></label>
+    <label class="field">Nipple discharge side<select id="nipple_discharge_side"><option value="">None</option><option>Right</option><option>Left</option><option>Both</option></select></label>
+    <label class="field">Discharge colour<select id="nipple_discharge_color"><option value="">None</option><option>Bloody</option><option>Clear</option><option>Milky</option></select></label>
+    <label class="field">Pain type<select id="pain_type"><option value="">None</option><option>Cyclical</option><option>Non-cyclical</option></select></label>
+    <label class="field">Pain severity (1–10)<input id="pain_severity" type="number" min="1" max="10"></label>
+  </div></section>
+
+  <section class="block" id="s2"><h2><span class="num">3</span>Personal Medical History</h2><div class="grid">
+    <label class="field">Marital status <span class="req">required</span><select id="marital_status" required><option value="">Select...</option><option>Married</option><option>Unmarried</option></select></label><label class="field">Age at menarche<input id="menarche_age" type="number" min="6" max="25"></label>
+    <label class="field">Menopausal status<select id="menopausal_status"><option value="">Not recorded</option><option>Premenopausal</option><option>Perimenopausal</option><option>Postmenopausal</option></select></label>
+    <label class="field">Age at menopause<input id="menopause_age" type="number" min="20" max="70"></label>
+    <div id="married_fields" class="grid-span-full"><label class="field">Parity<input id="parity" type="number" min="0" max="20"></label><label class="field">Age at first full-term birth<input id="age_first_birth" type="number" min="10" max="60"></label></div>
+    <label class="field">Oral contraceptive use<select id="ocp_use"><option value="">Not recorded</option><option>Current</option><option>Past</option><option>Never</option></select></label>
+    <label class="field">HRT<select id="hrt_use"><option value="">Not recorded</option><option>Yes</option><option>No</option><option>Unknown</option></select></label>
+    <label class="field">HRT duration (years)<input id="hrt_duration_years" type="number" min="0" max="60" step="0.5"></label>
+    <label class="field">Chest radiation <span class="req">required</span><select id="chest_radiation" required><option value="">Select...</option><option>Unknown</option><option>Yes</option><option>No</option></select></label>
+    <label class="field">Radiation age<input id="chest_radiation_age" type="number" min="1" max="100"></label>
+    <label class="field">Radiation years<input id="chest_radiation_years" type="number" min="0" max="100"></label>
+    <label class="field">Genetic test status <span class="req">required</span><select id="genetic_status" required><option value="">Select...</option><option>Never tested</option><option>Negative</option><option>Positive</option></select></label>
+    <label class="field" id="genetic_gene_field">Gene<select id="genetic_gene"><option value="">Select...</option><option>BRCA1</option><option>BRCA2</option><option>TP53</option><option>PTEN</option><option>PALB2</option></select></label>
+    <label class="field">Does the patient have any active end-stage organ failure or advanced dementia?<select id="geriatric_end_stage_failure"><option value="">Select...</option><option>Yes</option><option>No</option></select></label>
+    <label class="field">Is the patient fully independent in daily living activities (ADLs)?<select id="geriatric_adl_independent"><option value="">Select...</option><option>Yes</option><option>No</option></select></label>
+    <label class="field">Height (cm)<input id="height_cm" type="number" min="100" max="230" step="0.1"></label><label class="field">Weight (kg)<input id="weight_kg" type="number" min="25" max="300" step="0.1"></label><div class="field">Calculated BMI<output id="bmi_out" class="derived">—</output></div>
+  </div><div class="subgroup"><h3>Personal breast history</h3><div class="grid"><label class="field">Previous pregnancy<select id="pregnancy_history"><option>Unknown</option><option>Yes</option><option>No</option></select></label><label class="field">Breastfed<select id="breastfeeding_history"><option>Unknown</option><option>Yes</option><option>No</option></select></label></div></div><div class="subgroup"><h3>MRI safety screening</h3><p class="hint">Use Unknown when the question was not assessed.</p><div class="grid"><label class="field">Pacemaker<select id="mri_pacemaker"><option>Unknown</option><option>Yes</option><option>No</option></select></label><label class="field">Implants<select id="mri_implants"><option>Unknown</option><option>Yes</option><option>No</option></select></label><label class="field">Kidney problems<select id="mri_kidney_problems"><option>Unknown</option><option>Yes</option><option>No</option></select></label></div></div>
+  </section>
+
+  <section class="block" id="s3"><h2><span class="num">3</span>Family history</h2><div class="choice-row"><label><input type="checkbox" id="family_history_none"> No relevant family history</label></div><div id="family_entries"></div><button type="button" class="secondary" id="add_family">Add relative</button></section>
+
+  <section class="block" id="s4"><h2><span class="num">4</span>Clinical breast examination</h2><p class="hint">Every exam item is required. “Not answered” is not treated as normal.</p><div class="table-wrap"><table class="cbe"><thead><tr><th>Finding</th><th>Right</th><th>Left</th></tr></thead><tbody>
+    <tr><th>Inspection (Contour, Skin, Nipple)</th><td><select id="r_inspection"><option>Not answered</option><option>Normal</option><option>Abnormal</option></select><input class="conditional-finding" id="r_inspection_finding" placeholder="Describe abnormal contour / skin / nipple finding" hidden><select class="conditional-finding" id="r_nipple_discharge_color" hidden><option value="">Nipple discharge colour</option><option>None</option><option>Bloody</option><option>Clear</option><option>Milky</option></select><select class="conditional-finding" id="r_skin_change" hidden><option value="">Skin changes</option><option>Dimpling</option><option>Retraction</option><option>Scaling / rash</option></select></td><td><select id="l_inspection"><option>Not answered</option><option>Normal</option><option>Abnormal</option></select><input class="conditional-finding" id="l_inspection_finding" placeholder="Describe abnormal contour / skin / nipple finding" hidden><select class="conditional-finding" id="l_nipple_discharge_color" hidden><option value="">Nipple discharge colour</option><option>None</option><option>Bloody</option><option>Clear</option><option>Milky</option></select><select class="conditional-finding" id="l_skin_change" hidden><option value="">Skin changes</option><option>Dimpling</option><option>Retraction</option><option>Scaling / rash</option></select></td></tr>
+    <tr><th>Palpation (masses/nodularity)</th><td><select id="r_mass"><option>Not answered</option><option value="Normal">No Mass</option><option value="Abnormal">Mass Present</option></select><input class="conditional-finding" id="r_mass_size" type="number" min="1" max="300" placeholder="Size (mm)" hidden><select class="conditional-finding" id="r_mass_mobility" hidden><option value="">Mobility</option><option>Mobile</option><option>Fixed</option></select><select class="conditional-finding" id="r_mass_consistency" hidden><option value="">Consistency</option><option>Soft</option><option>Firm</option><option>Hard</option></select></td><td><select id="l_mass"><option>Not answered</option><option value="Normal">No Mass</option><option value="Abnormal">Mass Present</option></select><input class="conditional-finding" id="l_mass_size" type="number" min="1" max="300" placeholder="Size (mm)" hidden><select class="conditional-finding" id="l_mass_mobility" hidden><option value="">Mobility</option><option>Mobile</option><option>Fixed</option></select><select class="conditional-finding" id="l_mass_consistency" hidden><option value="">Consistency</option><option>Soft</option><option>Firm</option><option>Hard</option></select></td></tr>
+    <tr><th>Axillary lymph nodes</th><td><select id="r_nodes"><option>Not answered</option><option value="Normal">Not Palpable</option><option value="Abnormal">Palpable</option></select></td><td><select id="l_nodes"><option>Not answered</option><option value="Normal">Not Palpable</option><option value="Abnormal">Palpable</option></select></td></tr>
+  </tbody></table></div></section>
+
+  <section class="block" id="s5"><h2><span class="num">5</span>Imaging history</h2><p class="hint">Add every scan separately. The latest date and modality are used for the next-due calculation.</p><label class="choice-row"><input type="checkbox" id="imaging_not_done"> Imaging has not been done yet</label><div id="imaging_entries"></div><button type="button" class="secondary" id="add_imaging">Add imaging entry</button></section>
+
+  <section class="block" id="s6"><h2><span class="num">6</span>Plan, follow-up and urgent contact</h2><div id="live_warnings" class="warning-panel" role="alert" hidden></div><div class="choice-col" id="plan_options">
+    <label><input type="checkbox" value="Standard Wellness &amp; Awareness Tracking"> Standard Wellness &amp; Awareness Tracking</label><label><input type="checkbox" value="Routine Rescreening (Mammogram/DBT in 12–24 Months)"> Routine Rescreening (Mammogram/DBT in 12–24 Months)</label><label><input type="checkbox" value="Annual Breast MRI Only"> Annual Breast MRI Only</label><label><input type="checkbox" value="High-Risk Staggered Screening (Annual Mammogram + Annual MRI alternating every 6 months)"> High-Risk Staggered Screening (Annual Mammogram + Annual MRI alternating every 6 months)</label><label><input type="checkbox" value="Genetic Counseling &amp; Testing Referral"> Genetic Counseling &amp; Testing Referral</label><label><input type="checkbox" value="Short-Term Diagnostic Follow-up (Repeat Imaging at strict 6-Month mark)"> Short-Term Diagnostic Follow-up (Repeat Imaging at strict 6-Month mark)</label><label><input type="checkbox" value="Urgent Referral for Tissue Diagnosis (Core Needle Biopsy)"> Urgent Referral for Tissue Diagnosis (Core Needle Biopsy)</label><label><input type="checkbox" value="Stop Routine Screening (Switch to Symptomatic Care Plan only)"> Stop Routine Screening (Switch to Symptomatic Care Plan only)</label>
+  </div>
+  <label class="field grid-span-full">Additional Clinician Notes:<textarea id="clinician_notes" rows="4"></textarea></label>
+  <div class="grid"><label class="field">Examiner name <span class="req">required</span><input id="examiner_name" required></label><label class="field">Date signed <span class="req">required</span><input id="signed_date" type="date" required></label></div></section>
+  <div class="actions"><div id="form_error" class="form-error" role="alert" hidden></div><div id="form_success" class="form-success" role="status" hidden></div><button type="submit" id="save_btn">Save intake</button></div>
+</form></main>
+<dialog id="saved_dialog"><h2>Intake saved</h2><p id="saved_text"></p><section class="saved-risk"><h4>Risk-factor</h4><ul><li id="risk_label"></li></ul><h4>Alert Trigger</h4><ul><li id="risk_alert"></li></ul><h4>Reason</h4><ul id="risk_reasons"></ul><h4>Doctor's plan</h4><ul id="doctor_plan"></ul></section><div class="dialog-actions"><button type="button" class="secondary" id="close_saved">Close</button></div></dialog>
+<script src="{{ url_for('static', path='intake.js') }}?v=62"></script></body></html>
