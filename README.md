@@ -50,24 +50,15 @@ Stack: FastAPI (Python), PostgreSQL 16 with pgvector in Docker, server-rendered 
 
 ## 1. Quick start
 
-You need: **Docker Desktop**, **Python 3.11+** (developed on 3.13) and **Git**. Ollama is optional (only for the AI features).
+You need: **Docker Desktop**, **Python 3.11+** (developed on 3.13), **Git**, and Bash
+(Git Bash on Windows, WSL, or a macOS/Linux terminal). Ollama is optional (only for the AI features).
 
 ```bash
 git clone https://github.com/sameema-tariq-ds/screen2care.git
 cd screen2care
 git checkout javaria/care-loop-system
 
-docker compose up -d                     # starts PostgreSQL and runs every db/*.sql file (first start only)
-cp .env.example .env                     # Windows: copy .env.example .env
-
-python -m venv .venv
-# Windows:   .venv\Scripts\activate
-# Mac/Linux: source .venv/bin/activate
-pip install -r requirements.txt
-
-python -m app.seed_users                 # creates the test logins (password Dev@12345)
-python -m app.care_loop                  # runs the rules engine once on the seeded patients
-uvicorn app.main:app --reload
+bash main.sh                              # performs setup and starts the app
 ```
 
 Open http://localhost:8000 and log in, for example as `admin1` / `Dev@12345`.
@@ -83,38 +74,27 @@ Open http://localhost:8000 and log in, for example as `admin1` / `Dev@12345`.
 | http://localhost:8000/docs | Every API endpoint (Swagger) |
 | http://localhost:8000/health | Health check |
 
-Wait about 20 seconds after `docker compose up -d` before running `seed_users`; the database needs
-that long to load the SQL files. The command should end with `Done. Dev password is Dev@12345`.
+`main.sh` waits for PostgreSQL, applies the current migrations, creates the virtual environment,
+installs dependencies from `pyproject.toml`, seeds the test logins, runs the rules engine, and
+starts the app. The command should end with `Done. Dev password is Dev@12345` before the server
+starts.
 
 ## 2. Daily use and updating
 
-**Every day** (after a restart): open Docker Desktop and wait until it is running, then:
+**Every day** (after a restart): open Docker Desktop and run:
 
 ```bash
-docker start screening_db
-.venv\Scripts\activate                   # Mac/Linux: source .venv/bin/activate
-uvicorn app.main:app --reload
+bash main.sh
 ```
 
-**After `git pull`.** The SQL files in `db/` only run by themselves on an empty database. If the
-pull added new files to `db/`, apply only those, in number order:
-
-```bash
-docker exec -i screening_db psql -U loop -d screening_care_loop < db/12_loop_closure.sql
-docker exec -i screening_db psql -U loop -d screening_care_loop < db/13_followup_loop.sql
-docker exec -i screening_db psql -U loop -d screening_care_loop < db/14_biopsy_booking.sql
-docker exec -i screening_db psql -U loop -d screening_care_loop < db/15_oncology_referral.sql
-```
-
-Every SQL file can safely be run again.
+**After `git pull`.** Run `bash main.sh` again. It safely reapplies the current migrations,
+updates dependencies from `pyproject.toml`, and restarts the app.
 
 **Start again from an empty database.** This deletes all local data:
 
 ```bash
 docker compose down -v
-docker compose up -d
-python -m app.seed_users
-python -m app.care_loop
+bash main.sh
 ```
 
 **Show the app to others on the same Wi-Fi.** Start the server with
@@ -533,6 +513,9 @@ app/accounts.py        patient and staff sign-up, admin approval
 app/llm.py             local AI: note drafts, call scripts, Care Assistant
 app/seed_users.py      development logins
 app/database.py        database connection (reads .env)
+pyproject.toml         project metadata and Python dependencies
+Dockerfile             container image for the application
+main.sh                one-command local setup and startup
 app/templates/         HTML pages (Jinja2); base.html = layout and sidebar per role
 app/static/            app.css (design system, light and dark), intake.css and intake.js (forms)
 db/                    SQL files (section 18)
@@ -600,7 +583,7 @@ and delete them afterwards. They cover:
 
 | Problem | Cause and fix |
 |---|---|
-| Login fails for everyone | Wrong password: it is `Dev@12345` (capital D). Or `python -m app.seed_users` was not run or failed. Run it again and look for `Done.` |
+| Login fails for everyone | Wrong password: it is `Dev@12345` (capital D). Or `bash main.sh` was not run or failed. Run it again and look for `Done.` |
 | `relation "app_user" does not exist` | An old database volume from an earlier branch, so the SQL files never ran. Run `docker compose down -v`, `docker compose up -d`, then `seed_users` |
 | `password authentication failed for user "loop"` | Another PostgreSQL installed on Windows is using port 5432. Stop that service or change the port |
 | `failed to connect to the docker API` / connection refused on 5432 | Docker Desktop is not running. Start it, then `docker start screening_db` |
