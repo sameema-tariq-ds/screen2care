@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "_ui.html" import icon %}
 {% block title %}Register patient{% endblock %}
-{% block head %}<link rel="stylesheet" href="{{ url_for('static', path='intake.css') }}?v=3">{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', path='intake.css') }}?v=3"><style>#age_out + small { display: none; }</style>{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
@@ -38,16 +38,16 @@
         <input id="date_of_birth" type="date" required>
       </label>
       <div class="field">Age <output id="age_out" class="derived">—</output><small>Calculated from the date of birth</small></div>
-      <label class="field">Patient ID
-        <input id="patient_id" type="text" pattern="BC-([A-Z]{2}-[0-9]{3}|[0-9]{5})" placeholder="BC-HP-001">
-        <small>Leave empty for a new patient; an ID is created on save. For a returning patient use “Find existing patient”.</small>
+      <label class="field">Patient ID <span class="req">required</span>
+        <input id="patient_id" type="text" required pattern="BC-([A-Z]{2}-[0-9]{3}|[0-9]{5})" placeholder="BC-HP-001">
       </label>
       <label class="field">Phone number <span class="req">required</span>
         <input id="phone" type="tel" required minlength="7" maxlength="30">
       </label>
-      <label class="field">National ID (CNIC)
-        <input id="national_id" type="text" maxlength="30">
-        <small>Lets the patient create their own login later</small>
+      <label class="field">National ID (CNIC) <span class="req">required</span>
+        <input id="national_id" type="text" required pattern="[0-9]{5}-[0-9]{7}-[0-9]"
+               minlength="15" maxlength="15" placeholder="12345-1234567-8"
+               inputmode="numeric" title="Use the format 12345-1234567-8">
       </label>
     </div>
   </section>

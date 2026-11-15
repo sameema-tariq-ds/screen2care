@@ -66,9 +66,18 @@ h1, h2, h3 { line-height: 1.25; }
 .brand { display: flex; align-items: center; gap: 0.6rem; padding: 0 0.5rem 1.25rem; color: #fff; font-weight: 600; }
 .brand:hover { text-decoration: none; }
 .brand-mark {
-  display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: 8px;
+  display: grid; place-items: center; flex: 0 0 7.5rem; width: 7.5rem; height: 5.3rem;
+  overflow: hidden; border-radius: 14px;
   background: linear-gradient(135deg, #3d79b8, #2b9a8a); color: #fff;
 }
+.brand-mark img {
+  display: block; max-width: 100%; max-height: 100%; width: 100%; height: 100%;
+  object-fit: contain; border-radius: 14px;
+}
+.sidebar .brand-mark {
+  flex: 0 0 4rem; width: 4rem; height: 2.85rem; border-radius: 14px;
+}
+.sidebar .brand-mark img { border-radius: 14px; }
 .brand small { display: block; font-weight: 400; color: var(--side-muted); font-size: 0.75rem; }
 .nav { display: grid; gap: 0.15rem; }
 .nav a {
@@ -186,6 +195,12 @@ h1, h2, h3 { line-height: 1.25; }
 .search .icon { position: absolute; left: 0.65rem; top: 50%; transform: translateY(-50%); color: var(--muted); }
 .search input { padding: 0.45rem 0.7rem 0.45rem 2.1rem; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); min-width: 15rem; }
 .table-wrap { overflow-x: auto; }
+.table-group th {
+  padding: 0.7rem 0.75rem; text-align: left; color: var(--muted);
+  background: var(--surface-2); border-top: 1px solid var(--line); font-size: 0.82rem;
+  letter-spacing: 0.02em;
+}
+.table-group .icon { color: var(--accent); margin-right: 0.3rem; }
 table.data { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
 .data th {
   text-align: left; padding: 0.65rem 1rem; font-size: 0.75rem; font-weight: 600; color: var(--muted);
@@ -234,6 +249,16 @@ table.data { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
 }
 .f-input:focus, .form input:focus, .form select:focus, .form textarea:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
 textarea.f-input { resize: vertical; line-height: 1.55; }
+.password-field { position: relative; display: block; }
+.password-field input { padding-right: 2.8rem; }
+.password-toggle {
+  position: absolute; right: 0.35rem; top: 50%; transform: translateY(-50%);
+  display: grid; place-items: center; width: 2.2rem; height: 2.2rem;
+  border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer;
+}
+.password-toggle:hover, .password-toggle:focus-visible { color: var(--ink); background: var(--surface-2); }
+.password-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.password-toggle svg { width: 1.2rem; height: 1.2rem; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .notice { padding: 0.75rem 0.9rem; border-radius: 8px; font-size: 0.9rem; border: 1px solid transparent; }
 .notice-error { background: var(--crit-bg); color: var(--crit); }
 .notice-ok { background: var(--ok-bg); color: var(--ok); }
@@ -258,6 +283,10 @@ textarea.f-input { resize: vertical; line-height: 1.55; }
 }
 .auth-brand h1 { font-size: clamp(1.7rem, 3vw, 2.4rem); margin: 0 0 0.75rem; letter-spacing: -0.02em; color: #fff; }
 .auth-brand p { color: #b9cbcf; max-width: 32rem; margin: 0; }
+.auth-brand .brand-mark {
+  flex: 0 0 200px; width: 200px; height: 145px; background: #fff; border-radius: 24px;
+}
+.auth-brand .brand-mark img { width: 100%; height: 100%; object-fit: contain; border-radius: 24px; }
 .auth-points { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.9rem; max-width: 30rem; }
 .auth-points li { display: grid; grid-template-columns: auto 1fr; gap: 0.75rem; align-items: start; color: #d3e0e3; }
 .auth-points .icon { width: 1.3rem; height: 1.3rem; color: #7cc7b8; margin-top: 0.1rem; }

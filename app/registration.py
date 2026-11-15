@@ -16,16 +16,18 @@ class RegistrationIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     full_name: str = Field(min_length=2, max_length=150)
     date_of_birth: date
-    patient_id: Optional[str] = Field(None, pattern=r"^BC-([A-Z]{2}-\d{3}|\d{5})$")  # empty = new ID
+    patient_id: str = Field(..., pattern=r"^BC-([A-Z]{2}-\d{3}|\d{5})$")
     phone: str = Field(min_length=7, max_length=30)
-    national_id: Optional[str] = Field(None, max_length=30)
+    national_id: str = Field(..., min_length=15, max_length=15,
+                             pattern=r"^\d{5}-\d{7}-\d$")
     clinician_staff_id: int
     update_existing: bool = False    # True only after the desk loaded the record with "Find existing patient"
 
     @model_validator(mode="after")
     def check(self):
         self.full_name = self.full_name.strip()
-        self.national_id = (self.national_id or "").strip() or None
+        self.patient_id = self.patient_id.strip().upper()
+        self.national_id = self.national_id.strip()
         if self.date_of_birth >= date.today():
             raise ValueError("Date of birth must be in the past.")
         return self
@@ -48,7 +50,7 @@ def find_patient(conn, patient_id: str | None, national_id: str | None) -> tuple
         exists = conn.execute(text("SELECT 1 FROM patient WHERE patient_id = :p"), {"p": patient_id}).first()
         if by_nid and by_nid != patient_id:
             raise HTTPException(status_code=409,
-                                detail=f"National ID {national_id} already belongs to patient {by_nid}.")
+                                detail=f"National ID {national_id} is already registered with patient {by_nid}.")
         return patient_id, exists is not None
     return by_nid, by_nid is not None
 
@@ -65,8 +67,8 @@ def register_patient(r: RegistrationIn, admin_staff_id: int | None) -> dict:
         if returning and not r.update_existing:
             name = conn.execute(text("SELECT full_name FROM patient WHERE patient_id = :p"), {"p": patient_id}).scalar()
             raise HTTPException(status_code=409, detail=(
-                f"{patient_id} is already registered ({name}). To check in this patient, use "
-                "'Find existing patient' first. For a new patient, leave Patient ID empty."))
+                                f"Patient ID {patient_id} is already registered with {name}. To check in this patient, use "
+                                "'Find existing patient' first."))
         params = {"n": r.full_name, "d": r.date_of_birth, "nid": r.national_id, "ph": r.phone, "by": admin_staff_id}
         if returning:
             conn.execute(text("""
@@ -75,9 +77,6 @@ def register_patient(r: RegistrationIn, admin_staff_id: int | None) -> dict:
                 WHERE patient_id = :p
             """), {**params, "p": patient_id})
         else:
-            if patient_id is None:
-                patient_id = conn.execute(
-                    text("SELECT 'BC-' || to_char(nextval('patient_number_seq'), 'FM00000')")).scalar()
             conn.execute(text("""
                 INSERT INTO patient (patient_id, full_name, date_of_birth, national_id, phone, created_by)
                 VALUES (:p, :n, :d, :nid, :ph, :by)

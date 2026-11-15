@@ -21,6 +21,7 @@
 </section>
 {% else %}
 {% set s1_open = sections and sections[0].task and not sections[0].task.completed_at %}
+{% set s1_done = sections and sections[0].task and sections[0].task.completed_at %}
 <div class="grid-2" style="align-items:start">
   <section class="card" aria-labelledby="sla-h">
     <div class="card-head"><h2 id="sla-h">{{ icon('clock') }} SLA timeline</h2></div>
@@ -40,8 +41,8 @@
           <div>
             {% if st == 'Breached' %}<span class="pill pill-crit">{{ dur(s.hours_left) }} overdue</span>
             {% elif st == 'Running' %}<span class="pill pill-info">{{ dur(s.hours_left) }} left</span>
-            {% elif st == 'Met' %}<span class="pill pill-ok">Met</span>
-            {% elif st == 'Met late' %}<span class="pill pill-warn">Met late</span>
+            {% elif st == 'Met' %}<span class="pill pill-ok">Confirmed</span>
+            {% elif st == 'Met late' %}<span class="pill pill-warn">Confirmed late</span>
             {% else %}<span class="pill">{{ st }}</span>{% endif %}
           </div>
         </li>
@@ -81,7 +82,7 @@
         </form>
         {% endif %}
 
-        {% if (not biopsy or biopsy.status in ('Cancelled', 'NoShow', 'Declined')) and can.book_biopsy %}{% set shown.any = true %}
+        {% if s1_done and (not biopsy or biopsy.status in ('Cancelled', 'NoShow', 'Declined')) and can.book_biopsy %}{% set shown.any = true %}
         <form class="form step-form" data-endpoint="/api/patients/{{ patient.patient_id }}/biopsy">
           <h3>S2 · Book the biopsy appointment</h3>
           <label class="f-label">Appointment date and time
@@ -177,7 +178,8 @@
         </form>
         {% endif %}
 
-        {% if pathology and pathology.diagnosis == 'Malignant' and not treatment and can.treatment and pathology.disclosed_at %}{% set shown.any = true %}
+        {% if pathology and pathology.diagnosis == 'Malignant' and referral and referral.status == 'Assigned'
+              and not treatment and can.treatment and pathology.disclosed_at %}{% set shown.any = true %}
         <form class="form step-form" data-endpoint="/api/patients/{{ patient.patient_id }}/treatment">
           <h3>S5 · Treatment started</h3>
           <label class="f-label">First treatment
@@ -200,8 +202,7 @@
       <div class="card-pad">
         <p class="muted small" style="margin-top:0">Use only when the loop cannot go on. Nothing is deleted: the clocks stop,
           alerts are resolved, the record stays and the CMO reviews every closure. The loop can be reopened if the patient returns.</p>
-        <p class="small">Unanswered contact attempts recorded: <strong>{{ failed_contacts }}</strong>.
-          After closing, the patient leaves your list. The CMO keeps the record and can restart the loop if the patient comes back.</p>
+        <p class="small">After closing, the patient leaves your list. The CMO keeps the record and can restart the loop if the patient comes back.</p>
         <form class="form step-form" data-endpoint="/api/patients/{{ patient.patient_id }}/close-loop" data-confirm="Close this care loop? The SLA clocks will stop.">
           <label class="f-label">Reason
             <select name="reason" required>

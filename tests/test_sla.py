@@ -19,6 +19,10 @@ def logged_in(username: str) -> TestClient:
     return client
 
 
+def acknowledge_patient():
+    return logged_in(PATIENT_LOGIN).post("/api/me/acknowledge")
+
+
 def sql(query: str, **params):
     with engine.begin() as conn:
         return conn.execute(text(query), params)
@@ -82,8 +86,9 @@ def birads5_patient():
     sql("INSERT INTO patient (patient_id, full_name, date_of_birth, created_by) VALUES (:p, 'Test SLA', '1976-01-01', 1)", p=PID)
     sql("INSERT INTO patient_risk_profile (patient_id) VALUES (:p)", p=PID)
     sql("INSERT INTO care_team_assignment (patient_id, staff_id) VALUES (:p, 3)", p=PID)
-    eid = sql("""INSERT INTO encounter (patient_id, encounter_date, encounter_type, entered_by)
-                 VALUES (:p, now() - interval '1 day', 'Screening', 1) RETURNING encounter_id""", p=PID).scalar()
+    eid = sql("""INSERT INTO encounter (patient_id, encounter_date, encounter_type, entered_by, disposition)
+                 VALUES (:p, now() - interval '1 day', 'Screening', 1, 'UrgentBiopsyReferral')
+                 RETURNING encounter_id""", p=PID).scalar()
     sql("""INSERT INTO imaging_result (encounter_id, patient_id, modality, laterality, birads_category, density,
                                        result_released_at, radiologist_id)
            VALUES (:e, :p, 'Mammogram', 'B', 5, 'B', now() - interval '2 hours', 2)""", e=eid, p=PID)
@@ -134,25 +139,27 @@ def test_full_loop_with_every_escalation(birads5_patient):
     assert alert_roles() == {3: "LabDirector"}
     assert any(a["section"] == 3 for a in logged_in("labdirector1").get("/api/alerts").json())
 
-    # Malignant report -> S3 done, referral created, S4 and S5 start
+    # Malignant report -> S3 done, referral created, only S4 starts
     assert logged_in("pathology1").post(f"/api/patients/{pid}/pathology",
                                         json={"diagnosis": "Malignant", "histology": "IDC"}).status_code == 200
-    assert task(4)["status"] == "Running" and task(5)["status"] == "Running"
+    assert task(4)["status"] == "Running" and task(5) is None
 
-    # S4 breach -> Tumor Board; S5 breach -> CMO red flag
+    # S4 breach -> Tumor Board; S5 does not exist until referral is assigned
     make_overdue(4)
-    make_overdue(5)
     check_sla()
-    assert alert_roles() == {4: "TumorBoard", 5: "CMO"}
+    assert alert_roles() == {4: "TumorBoard"}
     tumorboard = logged_in("tumorboard1")
     assert pid in tumorboard.get("/").text
     cmo_alerts = logged_in("cmo1").get("/api/alerts").json()
-    assert {a["section"] for a in cmo_alerts if a["patient_id"] == pid} == {4, 5}
+    assert {a["section"] for a in cmo_alerts if a["patient_id"] == pid} == {4}
 
     # The navigator makes the referral; the oncology team receives it
     assert tumorboard.post(f"/api/patients/{pid}/referral/assign", json={"assignee_staff_id": 8}).status_code == 403
     assert logged_in("navigator1").post(f"/api/patients/{pid}/referral/assign",
                                         json={"assignee_staff_id": 8}).status_code == 200
+    assert task(5)["status"] == "Running"
+    make_overdue(5)
+    check_sla()
     assert alert_roles() == {5: "CMO"}
 
     # Treatment cannot be recorded before the patient has been told the result
@@ -187,6 +194,7 @@ def test_patient_acknowledges_in_time(birads5_patient):
 def test_benign_result_starts_no_oncology_clocks(birads5_patient):
     pid = birads5_patient
     logged_in("clinician1").post(f"/api/patients/{pid}/run-engine")
+    acknowledge_patient()
     logged_in("navigator1").post(f"/api/patients/{pid}/biopsy",
                                  json={"scheduled_for": "2030-01-01T09:00"})
     logged_in("radiology1").post(f"/api/patients/{pid}/biopsy/performed")
@@ -250,6 +258,7 @@ def test_birads5_notifies_oncology_team_at_once(birads5_patient):
 def test_benign_result_stands_the_oncology_team_down(birads5_patient):
     pid = birads5_patient
     logged_in("clinician1").post(f"/api/patients/{pid}/run-engine")
+    acknowledge_patient()
     logged_in("navigator1").post(f"/api/patients/{pid}/biopsy",
                                  json={"scheduled_for": "2030-01-01T09:00"})
     logged_in("radiology1").post(f"/api/patients/{pid}/biopsy/performed")
@@ -263,6 +272,7 @@ def test_benign_result_stands_the_oncology_team_down(birads5_patient):
 def test_malignant_keeps_the_notification_until_treatment(birads5_patient):
     pid = birads5_patient
     logged_in("clinician1").post(f"/api/patients/{pid}/run-engine")
+    acknowledge_patient()
     logged_in("navigator1").post(f"/api/patients/{pid}/biopsy",
                                  json={"scheduled_for": "2030-01-01T09:00"})
     logged_in("radiology1").post(f"/api/patients/{pid}/biopsy/performed")
@@ -270,5 +280,6 @@ def test_malignant_keeps_the_notification_until_treatment(birads5_patient):
     assert notification()["resolved_at"] is None
 
     logged_in("clinician1").post(f"/api/patients/{pid}/result-disclosed", json={"channel": "Phone"})
+    logged_in("navigator1").post(f"/api/patients/{pid}/referral/assign", json={"assignee_staff_id": 8})
     logged_in("clinician1").post(f"/api/patients/{pid}/treatment", json={"treatment_type": "Surgery"})
     assert notification()["resolved_at"] is not None

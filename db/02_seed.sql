@@ -29,21 +29,21 @@ INSERT INTO sla_definition
 
 -- Patients
 INSERT INTO patient (patient_id, full_name, date_of_birth, national_id, created_by) VALUES
- ('BC-HP-001', 'Sarah Ahmed',    '1981-05-12', 'NID-883921', 1),
- ('BC-HP-002', 'Fatima Malik',   '1974-03-22', 'NID-994012', 1),
- ('BC-HP-003', 'Ayesha Khan',    '1965-08-19', 'NID-112344', 1),
- ('BC-HP-004', 'Zainab Bibi',    '1985-11-30', 'NID-445671', 1),
- ('BC-HP-005', 'Mariam Begum',   '1950-04-05', 'NID-334920', 1),
- ('BC-DL-006', 'Sana Tariq',     '1978-06-14', 'NID-556123', 1),
- ('BC-DL-007', 'Noreen Aslam',   '1971-09-02', 'NID-778129', 1),
- ('BC-DL-008', 'Khadija Ali',    '1976-12-12', 'NID-223948', 1),
- ('BC-DL-009', 'Hina Shah',      '1983-02-27', 'NID-667823', 1),
- ('BC-DL-010', 'Farzana Yasmin', '1959-07-21', 'NID-889012', 1),
- ('BC-HR-011', 'Amna Raza',      '1994-10-05', 'NID-112299', 1),
- ('BC-HR-012', 'Zohra Bibi',     '1947-01-15', 'NID-993041', 1),
- ('BC-HR-013', 'Samina Sheikh',  '1988-05-20', 'NID-447192', 1),
- ('BC-HR-014', 'Irum Chaudhry',  '1999-08-14', 'NID-128490', 1),
- ('BC-HR-015', 'Amber Jamil',    '1979-03-10', 'NID-554129', 1);
+ ('BC-HP-001', 'Sarah Ahmed',    '1981-05-12', '35202-8839211-1', 1),
+ ('BC-HP-002', 'Fatima Malik',   '1974-03-22', '35202-9940121-2', 1),
+ ('BC-HP-003', 'Ayesha Khan',    '1965-08-19', '35202-1123441-3', 1),
+ ('BC-HP-004', 'Zainab Bibi',    '1985-11-30', '35202-4456711-4', 1),
+ ('BC-HP-005', 'Mariam Begum',   '1950-04-05', '35202-3349201-5', 1),
+ ('BC-DL-006', 'Sana Tariq',     '1978-06-14', '35202-5561231-6', 1),
+ ('BC-DL-007', 'Noreen Aslam',   '1971-09-02', '35202-7781291-7', 1),
+ ('BC-DL-008', 'Khadija Ali',    '1976-12-12', '35202-2239481-8', 1),
+ ('BC-DL-009', 'Hina Shah',      '1983-02-27', '35202-6678231-9', 1),
+ ('BC-DL-010', 'Farzana Yasmin', '1959-07-21', '35202-8890122-0', 1),
+ ('BC-HR-011', 'Amna Raza',      '1994-10-05', '35202-1122992-1', 1),
+ ('BC-HR-012', 'Zohra Bibi',     '1947-01-15', '35202-9930412-2', 1),
+ ('BC-HR-013', 'Samina Sheikh',  '1988-05-20', '35202-4471922-3', 1),
+ ('BC-HR-014', 'Irum Chaudhry',  '1999-08-14', '35202-1284902-4', 1),
+ ('BC-HR-015', 'Amber Jamil',    '1979-03-10', '35202-5541292-5', 1);
 
 -- Risk profiles ("Negative / Unknown" in the source = 'Unknown')
 INSERT INTO patient_risk_profile

@@ -144,7 +144,7 @@ def test_engine_treats_end_stage_illness_as_serious(patient_80):
 
 # ---------- Intake form -> geriatric_assessment -> engine ------------------------------
 
-INTAKE_NID = "NID-TEST-RULES-75"
+INTAKE_NID = "35202-7654321-5"
 
 
 def remove_intake_patient():

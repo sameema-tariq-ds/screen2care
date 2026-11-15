@@ -135,6 +135,8 @@ def fetch_patients(user: dict) -> list[dict]:
     cond, params = scope_filter(user)
     with engine.connect() as conn:
         rows = [dict(r) for r in conn.execute(text(PATIENT_LIST_SQL.format(scope=cond)), params).mappings()]
+    # Keep active care-loop patients together at the top of the clinical worklist.
+    rows.sort(key=lambda r: (0 if r.get("episode_status") else 1, r["patient_id"]))
     if user["role"] == "Admin":  # front desk: no clinical results
         for r in rows:
             for k in CLINICAL_LIST_FIELDS:

@@ -1,4 +1,4 @@
-"""First-visit risk tier shown after an intake is saved (High / Medium / Low / Incomplete).
+"""First-visit risk tier shown after an intake is saved.
 
 Ported from screen2care (src/risk_engine.py, branch feature/screening). It reads the
 saved form snapshot only, and does not calculate a lifetime-risk percentage; the Low
@@ -16,7 +16,7 @@ ALERT_TRIGGERS = {
     "High": "CRITICAL HIGH-RISK CARE ROUTING ACTIVE",
     "Medium": "DENSE TISSUE MASKING RISK / SHORT-INTERVAL TRACKING",
     "Low": "ROUTINE SCREENING ELIGIBLE",
-    "Incomplete": "RISK ASSESSMENT PENDING",
+    "Baseline": "FIRST SCREENING BASELINE",
 }
 
 
@@ -73,7 +73,8 @@ def calculate_risk(form: dict[str, Any]) -> RiskAssessment:
     if medium:
         return RiskAssessment("Medium", "Medium", tuple(medium))
     if not scans:
-        return RiskAssessment("Incomplete", "Incomplete", ("No mammogram or DBT recorded yet.",))
+        return RiskAssessment("Baseline", "Baseline assessment",
+                              ("No mammogram or DBT baseline recorded yet; continue symptom-based or clinician-directed care.",))
     age = form.get("age")
     if latest.get("density") in ("A", "B") and latest.get("birads") in (1, 2):
         return RiskAssessment("Low", "Low (lifetime risk not assessed)",

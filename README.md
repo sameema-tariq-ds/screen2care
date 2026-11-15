@@ -79,6 +79,32 @@ installs dependencies from `pyproject.toml`, seeds the test logins, runs the rul
 starts the app. The command should end with `Done. Dev password is Dev@12345` before the server
 starts.
 
+### Share a temporary prototype link with ngrok
+
+ngrok exposes the already-running local app through a temporary HTTPS URL. It does not replace
+the application or database, so keep Docker, the app terminal, and the ngrok terminal running.
+
+First configure ngrok once with an account token:
+
+```bash
+ngrok config add-authtoken <YOUR_NGROK_TOKEN>
+```
+
+Then start Screen2Care in one terminal:
+
+```bash
+bash main.sh
+```
+
+In a second terminal, from the project directory, run:
+
+```bash
+bash ngrok.sh
+```
+
+ngrok will print a temporary `https://...ngrok...` URL to share. Stop sharing when the demo ends
+or close the ngrok terminal. Use seeded demo data only; do not expose real patient information.
+
 ## 2. Daily use and updating
 
 **Every day** (after a restart): open Docker Desktop and run:
@@ -175,7 +201,7 @@ The intake is split so that each person only enters what is theirs to decide.
 
 - Fields: full name, date of birth (age is calculated), phone, national ID (CNIC), Patient ID, and
   **the clinician** who will see the patient.
-- **Leave Patient ID empty for a new patient.** An ID such as `BC-00011` is created on save.
+- **Patient ID is required** when registering a patient and must use the displayed format.
 - **Returning patient:** use **Find existing patient** first. That loads the record so it can be
   updated. Typing an existing Patient ID or CNIC on a new registration is refused (409), so another
   patient's record is never overwritten by mistake.
@@ -214,8 +240,8 @@ The intake is split so that each person only enters what is theirs to decide.
 |---|---|
 | High | Positive BRCA1/2, TP53, PTEN or PALB2 test; chest radiation between age 10 and 30; ADH, ALH or LCIS on a biopsy; mother or sister with breast cancer before 50; a relative with a BRCA1/2 mutation |
 | Medium | Dense breast (C or D) on the latest mammogram/DBT, or BI-RADS 3 |
-| Low | None of the above (the lifetime risk percentage is not calculated) |
-| Incomplete | No mammogram or DBT recorded yet |
+| Low | None of the above with a Mammogram/DBT baseline (the lifetime risk percentage is not calculated) |
+| Baseline assessment | No Mammogram/DBT baseline yet; continue symptom-based or clinician-directed care |
 
 ## 7. The rules engine (screening lanes)
 
@@ -372,9 +398,9 @@ A care loop or follow-up that cannot go on is **closed with a reason**. It is ne
   above. The alert appears on that role's dashboard and on the CMO's.
 - **Mark seen** only records "I have seen this alert" (who and when). It does **not** stop the clock
   or close the alert. An alert closes by itself when the step is done or the loop is closed.
-- A step done late shows **Met late**. The lateness stays on record.
-- Timeline colours: Running (blue, time left), Breached (red, time overdue), Met (green),
-  Met late (amber), Cancelled and Not started (grey).
+- A step done late shows **Confirmed late**. The lateness stays on record.
+- Timeline colours: Running (blue, time left), Breached (red, time overdue), Confirmed (green),
+  Confirmed late (amber), Cancelled and Not started (grey).
 
 ## 12. Dashboards
 

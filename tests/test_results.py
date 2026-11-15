@@ -17,6 +17,7 @@ def staff_name(staff_id: int) -> str:
 
 def to_report(pid: str, diagnosis: str = "Malignant"):
     logged_in("clinician1").post(f"/api/patients/{pid}/run-engine")
+    logged_in(PATIENT_LOGIN).post("/api/me/acknowledge")
     logged_in("navigator1").post(f"/api/patients/{pid}/biopsy",
                                  json={"scheduled_for": "2030-01-01T09:00"})
     logged_in("radiology1").post(f"/api/patients/{pid}/biopsy/performed")
@@ -28,6 +29,7 @@ def test_patient_page_follows_every_stage(birads5_patient):
     pid = birads5_patient
     logged_in("clinician1").post(f"/api/patients/{pid}/run-engine")
     assert "Your progress" not in patient_page()            # nothing booked yet: status as before
+    logged_in(PATIENT_LOGIN).post("/api/me/acknowledge")
     logged_in("navigator1").post(f"/api/patients/{pid}/biopsy",
                                  json={"scheduled_for": "2030-01-01T09:00"})
     page = patient_page()

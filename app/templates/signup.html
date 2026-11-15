@@ -30,7 +30,12 @@
           <input name="username" type="text" autocomplete="username" required>
         </label>
         <label class="f-label">Password <small>At least 8 characters, with letters and numbers</small>
-          <input name="password" type="password" autocomplete="new-password" required>
+          <span class="password-field">
+            <input id="patient-password" name="password" type="password" autocomplete="new-password" required>
+            <button type="button" class="password-toggle" data-target="patient-password" aria-label="Show password" title="Show password">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+            </button>
+          </span>
         </label>
         <div class="notice notice-error" role="alert" hidden></div>
         <button class="btn btn-block" type="submit">Create patient account</button>
@@ -49,7 +54,12 @@
           <input name="username" type="text" autocomplete="username" required>
         </label>
         <label class="f-label">Password <small>At least 8 characters, with letters and numbers</small>
-          <input name="password" type="password" autocomplete="new-password" required>
+          <span class="password-field">
+            <input id="staff-password" name="password" type="password" autocomplete="new-password" required>
+            <button type="button" class="password-toggle" data-target="staff-password" aria-label="Show password" title="Show password">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/></svg>
+            </button>
+          </span>
         </label>
         <div class="notice notice-error" role="alert" hidden></div>
         <button class="btn btn-block" type="submit">Request staff account</button>

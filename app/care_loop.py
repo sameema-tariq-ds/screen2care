@@ -114,6 +114,13 @@ def _log(conn, pid, event, actor=None, episode_id=None, **details):
 
 
 def _open_episode_id(conn, pid) -> int:
+    disposition = conn.execute(text("""
+        SELECT disposition FROM encounter WHERE patient_id = :p
+        ORDER BY encounter_date DESC, encounter_id DESC LIMIT 1
+    """), {"p": pid}).scalar()
+    if disposition != "UrgentBiopsyReferral":
+        raise HTTPException(status_code=409,
+                            detail="The clinician must select urgent biopsy referral before using the care loop")
     eid = conn.execute(text(
         "SELECT episode_id FROM care_episode WHERE patient_id = :p AND status IN ('Open','Paused')"),
         {"p": pid}).scalar()
@@ -152,6 +159,16 @@ def _task_open(conn, episode_id, section) -> bool:
         SELECT 1 FROM sla_task WHERE episode_id = :e AND section = :s
           AND completed_at IS NULL AND status <> 'Cancelled'
     """), {"e": episode_id, "s": section}).first() is not None
+
+
+def _require_task_completed(conn, episode_id, section, message: str):
+    """Require the preceding care-loop step to have been completed."""
+    done = conn.execute(text("""
+        SELECT 1 FROM sla_task
+        WHERE episode_id = :e AND section = :s AND completed_at IS NOT NULL
+    """), {"e": episode_id, "s": section}).first()
+    if done is None:
+        raise HTTPException(status_code=409, detail=message)
 
 
 # ---------- loop steps ------------------------------------------------------------
@@ -247,7 +264,8 @@ def book_biopsy(pid: str, data: BiopsyIn, staff_id: int) -> dict:
         if conn.execute(text("SELECT 1 FROM biopsy WHERE episode_id = :e AND status IN ('Ordered','Booked')"),
                         {"e": eid}).first():
             raise HTTPException(status_code=409, detail="A biopsy is already booked for this patient")
-        _acknowledge(conn, pid, eid, staff_id)   # booking means the patient has been reached
+        _require_task_completed(conn, eid, 1,
+                                "The patient must confirm the result message before a biopsy can be booked")
         bid = conn.execute(text("""
             INSERT INTO biopsy (episode_id, ordered_at, booked_at, booked_by, scheduled_for, status)
             VALUES (:e, now(), now(), :s, :when, 'Booked') RETURNING biopsy_id
@@ -260,6 +278,8 @@ def book_biopsy(pid: str, data: BiopsyIn, staff_id: int) -> dict:
 def biopsy_performed(pid: str, staff_id: int) -> dict:
     with engine.begin() as conn:
         eid = _open_episode_id(conn, pid)
+        _require_task_completed(conn, eid, 2,
+                                "The biopsy appointment must be booked before it can be marked as performed")
         bid = conn.execute(text("""
             UPDATE biopsy SET status = 'Performed', performed_at = now()
             WHERE biopsy_id = (SELECT biopsy_id FROM biopsy WHERE episode_id = :e AND status = 'Booked'
@@ -297,7 +317,6 @@ def record_pathology(pid: str, data: PathologyIn, staff_id: int) -> dict:
                 VALUES (:p, :e, 'SurgicalOncology', now(), 'Pending')
             """), {"p": pid, "e": eid})
             _start_task(conn, eid, 4)
-            _start_task(conn, eid, 5)
             _log(conn, pid, "MalignantConfirmed", staff_id, eid)
         else:
             _resolve_notifications(conn, eid)   # not cancer: the oncology team can stand down
@@ -307,6 +326,8 @@ def record_pathology(pid: str, data: PathologyIn, staff_id: int) -> dict:
 def assign_referral(pid: str, data: AssignIn, staff_id: int) -> dict:
     with engine.begin() as conn:
         eid = _open_episode_id(conn, pid)
+        _require_task_completed(conn, eid, 3,
+                                "The pathology report must be completed before an oncology referral can be sent")
         ok = conn.execute(text(
             "SELECT 1 FROM staff WHERE staff_id = :s AND is_active AND role = 'TumorBoard'"),
             {"s": data.assignee_staff_id}).first()
@@ -323,6 +344,7 @@ def assign_referral(pid: str, data: AssignIn, staff_id: int) -> dict:
         if rid is None:
             raise HTTPException(status_code=409, detail="No pending referral to assign")
         _complete_task(conn, eid, 4)
+        _start_task(conn, eid, 5)
         _log(conn, pid, "ReferralAssigned", staff_id, eid, referral_id=rid, assignee=data.assignee_staff_id)
     return {"referral_id": rid}
 
@@ -330,6 +352,8 @@ def assign_referral(pid: str, data: AssignIn, staff_id: int) -> dict:
 def start_treatment(pid: str, data: TreatmentIn, staff_id: int) -> dict:
     with engine.begin() as conn:
         eid = _open_episode_id(conn, pid)
+        _require_task_completed(conn, eid, 4,
+                                "The oncology referral must be assigned before treatment can start")
         malignant = conn.execute(text("""
             SELECT 1 FROM pathology_result r JOIN biopsy b ON b.biopsy_id = r.biopsy_id
             WHERE b.episode_id = :e AND r.diagnosis = 'Malignant'
@@ -710,6 +734,12 @@ def get_loop(pid: str) -> dict:
             JOIN imaging_result i ON i.imaging_id = e.trigger_imaging_id
             WHERE e.patient_id = :p ORDER BY e.opened_at DESC, e.episode_id DESC LIMIT 1
         """), {"p": pid}).mappings().first()
+        disposition = conn.execute(text("""
+            SELECT disposition FROM encounter WHERE patient_id = :p
+            ORDER BY encounter_date DESC, encounter_id DESC LIMIT 1
+        """), {"p": pid}).scalar()
+        if disposition != "UrgentBiopsyReferral":
+            episode = None
         ctx = {"patient": patient, "episode": episode, "sections": [], "contacts": [], "biopsy": None,
                "pathology": None, "referral": None, "treatment": None, "assignees": [],
                "results_appt": None, "clinicians": [], "failed_contacts": 0, "closed_by_name": None,

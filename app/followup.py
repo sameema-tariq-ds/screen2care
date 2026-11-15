@@ -152,6 +152,24 @@ def _open_loop(conn, pid) -> dict:
     return loop
 
 
+def _recommendation_satisfied(conn, pid: str, lane: str, due_date: date | None) -> bool:
+    """Do not open an overdue loop when the recommended scan was completed on time."""
+    if due_date is None:
+        return False
+    if lane == "HighRisk-MRIOnly":
+        modalities = ("MRI",)
+    elif lane in ("RoutineScreening", "HighRisk-DBT+MRI"):
+        modalities = ("Mammogram", "DBT", "MRI")
+    else:
+        modalities = ("Mammogram", "DBT", "Ultrasound", "MRI")
+    return conn.execute(text("""
+        SELECT 1 FROM imaging_result
+        WHERE patient_id = :p AND performed_date >= :due
+          AND modality = ANY(:modalities)
+        LIMIT 1
+    """), {"p": pid, "due": due_date, "modalities": list(modalities)}).first() is not None
+
+
 # ---------- called by the rules engine ------------------------------------------
 
 def sync(conn, pid: str, lane: str, next_due: Optional[date], latest_imaging_id: Optional[int]) -> None:
@@ -185,6 +203,8 @@ def sync(conn, pid: str, lane: str, next_due: Optional[date], latest_imaging_id:
     if latest_imaging_id and conn.execute(text("SELECT 1 FROM followup_loop WHERE source_imaging_id = :i"),
                                           {"i": latest_imaging_id}).first():
         return                     # this result already had its loop (closed with a reason or done)
+    if _recommendation_satisfied(conn, pid, lane, next_due):
+        return                     # the recommended imaging was recorded on or after its due date
     loop_id = conn.execute(text("""
         INSERT INTO followup_loop (patient_id, lane, source_imaging_id, due_date) VALUES (:p, :l, :i, :d)
         RETURNING loop_id

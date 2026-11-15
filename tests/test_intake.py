@@ -14,7 +14,7 @@ from app.schemas import IntakeForm, PlanOption
 from app.seed_users import DEV_PASSWORD
 
 PID = "BC-TS-901"
-NID = "NID-TEST-INTAKE-901"
+NID = "35202-1234567-1"
 ROUTINE = PlanOption.ROUTINE_RESCREEN.value
 URGENT = PlanOption.URGENT_BIOPSY.value
 NORMAL = {"inspection": "Normal", "mass": "Normal", "axillary_nodes": "Normal"}
@@ -96,7 +96,7 @@ def test_risk_tiers():
     assert medium.tier == "Medium"
     low = calculate_risk(submitted())
     assert low.tier == "Low" and low.label == "Low (lifetime risk not assessed)"
-    assert calculate_risk(submitted(imaging_not_done=True, imaging=[])).tier == "Incomplete"
+    assert calculate_risk(submitted(imaging_not_done=True, imaging=[])).tier == "Baseline"
 
 
 def test_plan_disposition_mapping():
@@ -208,7 +208,7 @@ def test_existing_patient_is_not_overwritten_by_accident(admin):
     # Typing an existing Patient ID (or CNIC) on a new registration is refused...
     clash = admin.post("/api/registration", json=registration(full_name="Someone Else"))
     assert clash.status_code == 409 and "Find existing patient" in clash.json()["detail"]
-    assert admin.post("/api/registration", json=registration(patient_id=None, full_name="X Y")).status_code == 409
+    assert admin.post("/api/registration", json=registration(patient_id=None, full_name="X Y")).status_code == 422
     assert sql("SELECT full_name FROM patient WHERE patient_id = :p", p=PID).scalar() == "Test Intake"
     # ...but a record loaded with "Find existing patient" can be updated
     ok = admin.post("/api/registration", json=registration(phone="03110000000", update_existing=True))

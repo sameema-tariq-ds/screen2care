@@ -150,6 +150,13 @@ def save_plan(pid: str, data: PlanIn, clinician_id: int) -> dict:
                "d": json.dumps({"encounter_id": enc_id, "disposition": data.disposition,
                                 "overridden": differs, "note_version": version})})
 
+    if new_lane == "UrgentWorkup":
+        # The final clinical disposition explicitly authorizes the five-step
+        # biopsy/oncology SLA timeline.
+        from app.care_loop import open_episode
+        with engine.begin() as conn:
+            open_episode(conn, pid)
+
     return {"saved": True, "overridden": differs, "lane": new_lane, "note_version": version}
 
 

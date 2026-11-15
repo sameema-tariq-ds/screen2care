@@ -267,7 +267,15 @@
         </tr>
       </thead>
       <tbody>
+      {% set groups = namespace(active=false, other=false) %}
       {% for p in patients %}
+        {% if clinical and p.episode_status and not groups.active %}
+          {% set groups.active = true %}
+          <tr class="table-group"><th colspan="9">{{ icon('loop') }} Patients with an active care loop</th></tr>
+        {% elif clinical and not p.episode_status and not groups.other %}
+          {% set groups.other = true %}
+          <tr class="table-group"><th colspan="9">{{ icon('calendar') }} Patients without an active care loop</th></tr>
+        {% endif %}
         <tr>
           <td><div class="name">{{ p.full_name }}</div><div class="id muted">{{ p.patient_id }}</div></td>
           <td>{{ p.age }}</td>
