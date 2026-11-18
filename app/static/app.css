@@ -283,10 +283,6 @@ textarea.f-input { resize: vertical; line-height: 1.55; }
 }
 .auth-brand h1 { font-size: clamp(1.7rem, 3vw, 2.4rem); margin: 0 0 0.75rem; letter-spacing: -0.02em; color: #fff; }
 .auth-brand p { color: #b9cbcf; max-width: 32rem; margin: 0; }
-.auth-brand .brand-mark {
-  flex: 0 0 200px; width: 200px; height: 145px; background: #fff; border-radius: 24px;
-}
-.auth-brand .brand-mark img { width: 100%; height: 100%; object-fit: contain; border-radius: 24px; }
 .auth-points { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.9rem; max-width: 30rem; }
 .auth-points li { display: grid; grid-template-columns: auto 1fr; gap: 0.75rem; align-items: start; color: #d3e0e3; }
 .auth-points .icon { width: 1.3rem; height: 1.3rem; color: #7cc7b8; margin-top: 0.1rem; }
